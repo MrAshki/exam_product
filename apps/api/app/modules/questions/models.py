@@ -1,8 +1,8 @@
 import uuid
 
-from sqlalchemy import Boolean, Float, ForeignKey, Integer, JSON, String, Text, text as sa_text
+from sqlalchemy import Boolean, Float, ForeignKey, Index, Integer, JSON, String, Text, func, text as sa_text
 from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.orm import Mapped, declared_attr, mapped_column, relationship
 
 from app.db.base import Base, BaseModelMixin
 from app.modules.exams.status import ExtractionMode, QuestionSourceType, QuestionStatus
@@ -10,6 +10,18 @@ from app.modules.exams.status import ExtractionMode, QuestionSourceType, Questio
 
 class Question(BaseModelMixin, Base):
     __tablename__ = "questions"
+
+    @declared_attr.directive
+    def __table_args__(cls) -> tuple[Index]:
+        return (
+            Index(
+                "uq_questions_exam_order_active",
+                "exam_id",
+                "order_index",
+                unique=True,
+                postgresql_where=cls.deleted_at.is_(None),
+            ),
+        )
 
     teacher_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
@@ -88,6 +100,18 @@ class Question(BaseModelMixin, Base):
 
 class QuestionOption(BaseModelMixin, Base):
     __tablename__ = "question_options"
+
+    @declared_attr.directive
+    def __table_args__(cls) -> tuple[Index]:
+        return (
+            Index(
+                "uq_question_options_question_key_active",
+                "question_id",
+                func.lower(cls.option_key),
+                unique=True,
+                postgresql_where=cls.deleted_at.is_(None),
+            ),
+        )
 
     teacher_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),

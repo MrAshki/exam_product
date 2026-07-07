@@ -1,14 +1,26 @@
 import uuid
 
-from sqlalchemy import ForeignKey, String, Text
+from sqlalchemy import ForeignKey, Index, String, Text, func
 from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.orm import Mapped, declared_attr, mapped_column, relationship
 
 from app.db.base import Base, BaseModelMixin
 
 
 class Classroom(BaseModelMixin, Base):
     __tablename__ = "classes"
+
+    @declared_attr.directive
+    def __table_args__(cls) -> tuple[Index]:
+        return (
+            Index(
+                "uq_classes_teacher_title_active",
+                "teacher_id",
+                func.lower(cls.title),
+                unique=True,
+                postgresql_where=cls.deleted_at.is_(None),
+            ),
+        )
 
     teacher_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
