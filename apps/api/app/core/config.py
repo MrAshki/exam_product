@@ -23,6 +23,8 @@ class Settings(BaseSettings):
     REDIS_PORT: int = 6379
     REDIS_DB: int = 0
     REDIS_URL: str | None = Field(default=None)
+    CELERY_BROKER_URL: str = "redis://localhost:16379/0"
+    CELERY_RESULT_BACKEND: str = "redis://localhost:16379/1"
 
     AI_PROVIDER: str = "mock"
     AI_MODEL: str = "gemini-2.0-flash"
