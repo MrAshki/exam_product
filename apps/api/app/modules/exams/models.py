@@ -1,0 +1,78 @@
+import uuid
+from datetime import datetime
+
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text, text
+from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+from app.db.base import Base, BaseModelMixin
+from app.modules.exams.status import ExamStatus
+
+
+class Exam(BaseModelMixin, Base):
+    __tablename__ = "exams"
+
+    teacher_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    class_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("classes.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    start_time: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    end_time: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    duration_minutes: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    status: Mapped[str] = mapped_column(
+        String(50),
+        nullable=False,
+        default=ExamStatus.DRAFT.value,
+        server_default=text("'draft'"),
+        index=True,
+    )
+    total_points: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default=text("0"))
+    show_leaderboard: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default=text("true"))
+    allow_appeals: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default=text("true"))
+    show_correct_answers: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default=text("true"))
+    show_feedback: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default=text("true"))
+
+    teacher = relationship("User")
+    classroom = relationship("Classroom")
+
+
+class ExamBlueprint(BaseModelMixin, Base):
+    __tablename__ = "exam_blueprints"
+
+    teacher_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    class_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("classes.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    exam_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("exams.id", ondelete="CASCADE"),
+        nullable=False,
+        unique=True,
+    )
+    multiple_choice_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default=text("0"))
+    short_answer_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default=text("0"))
+    essay_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default=text("0"))
+    true_false_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default=text("0"))
+    total_question_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default=text("0"))
+
+    teacher = relationship("User")
+    classroom = relationship("Classroom")
+    exam = relationship("Exam")
