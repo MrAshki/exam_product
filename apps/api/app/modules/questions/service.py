@@ -4,6 +4,8 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.modules.auth.models import User
+from app.modules.ai.schemas import AICallContext
+from app.modules.ai.service import AIService
 from app.modules.exams.status import ExamStatus, QuestionStatus, QuestionType
 from app.modules.questions.errors import (
     class_not_found,
@@ -12,7 +14,9 @@ from app.modules.questions.errors import (
     invalid_question_options,
     invalid_question_type,
     question_already_confirmed,
+    question_not_ready_for_ai,
     question_not_found,
+    question_type_not_supported,
     question_validation_failed,
 )
 from app.modules.questions.models import Question, QuestionOption
@@ -147,6 +151,45 @@ class QuestionService:
 
         return self.repository.save_question_with_options(question, options=None)
 
+    def suggest_rubric(
+        self,
+        class_id: UUID,
+        exam_id: UUID,
+        question_id: UUID,
+        teacher: User,
+    ) -> dict:
+        exam = self._get_exam(class_id, exam_id, teacher)
+        self._ensure_exam_is_draft(exam)
+        question = self._get_question(class_id, exam_id, question_id, teacher)
+        if question.type != QuestionType.ESSAY.value:
+            raise question_type_not_supported()
+        self._ensure_not_confirmed(question)
+        self._ensure_ready_for_ai(question)
+
+        ai_service = AIService(self.repository.db)
+        rubric = ai_service.suggest_essay_rubric(
+            question_text=question.text or "",
+            expected_answer=question.expected_answer or "",
+            total_points=question.points,
+            context=AICallContext(
+                teacher_id=teacher.id,
+                class_id=class_id,
+                exam_id=exam_id,
+                question_id=question.id,
+            ),
+        )
+
+        question.rubric_ai_suggested = rubric
+        question.needs_teacher_review = True
+        saved_question = self.repository.save_question(question)
+        return {
+            "question_id": str(saved_question.id),
+            "rubric_ai_suggested": rubric,
+            "rubric_teacher_confirmed": saved_question.rubric_teacher_confirmed,
+            "teacher_confirmed": saved_question.teacher_confirmed,
+            "needs_teacher_review": saved_question.needs_teacher_review,
+        }
+
     def get_options(self, question: Question) -> list[QuestionOption]:
         return self.repository.list_options_for_question(
             question_id=question.id,
@@ -190,6 +233,18 @@ class QuestionService:
     def _ensure_not_confirmed(question: Question) -> None:
         if question.teacher_confirmed or question.status == QuestionStatus.CONFIRMED.value:
             raise question_already_confirmed()
+
+    @staticmethod
+    def _ensure_ready_for_ai(question: Question) -> None:
+        errors: dict[str, list[str]] = {}
+        if not question.text:
+            errors.setdefault("text", []).append("Text is required.")
+        if not question.expected_answer:
+            errors.setdefault("expected_answer", []).append("Expected answer is required.")
+        if question.points <= 0:
+            errors.setdefault("points", []).append("Points must be greater than 0.")
+        if errors:
+            raise question_not_ready_for_ai(errors)
 
     def _apply_common_fields(self, question: Question, payload: QuestionUpdate) -> None:
         update_data = payload.model_dump(exclude_unset=True)

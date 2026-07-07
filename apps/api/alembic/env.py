@@ -5,6 +5,7 @@ from sqlalchemy import engine_from_config, pool
 
 from app.core.config import settings
 from app.db.base import Base
+from app.modules.ai import logs as ai_logs  # noqa: F401
 from app.modules.auth import models as auth_models  # noqa: F401
 from app.modules.classrooms import models as classroom_models  # noqa: F401
 from app.modules.exams import models as exam_models  # noqa: F401

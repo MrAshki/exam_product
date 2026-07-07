@@ -24,6 +24,11 @@ class Settings(BaseSettings):
     REDIS_DB: int = 0
     REDIS_URL: str | None = Field(default=None)
 
+    AI_PROVIDER: str = "mock"
+    AI_MODEL: str = "gemini-2.0-flash"
+    GEMINI_API_KEY: str | None = Field(default=None)
+    AI_TIMEOUT_SECONDS: int = 30
+
     model_config = SettingsConfigDict(
         env_file=(".env", "../../.env"),
         env_file_encoding="utf-8",

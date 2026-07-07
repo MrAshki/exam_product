@@ -71,6 +71,18 @@ def clear_question(
     return success_response(data=_serialize_question(question, service))
 
 
+@router.post("/{question_id}/suggest-rubric")
+def suggest_rubric(
+    class_id: UUID,
+    exam_id: UUID,
+    question_id: UUID,
+    teacher: User = Depends(get_current_teacher),
+    service: QuestionService = Depends(get_question_service),
+) -> dict:
+    suggestion = service.suggest_rubric(class_id, exam_id, question_id, teacher)
+    return success_response(data=suggestion)
+
+
 def _serialize_question(question: Question, service: QuestionService) -> dict:
     options = service.get_options(question)
     data = QuestionRead.model_validate(question).model_dump(mode="json")
