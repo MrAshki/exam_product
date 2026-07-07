@@ -5,7 +5,8 @@ from sqlalchemy import engine_from_config, pool
 
 from app.core.config import settings
 from app.db.base import Base
-from app.modules.auth import models  # noqa: F401
+from app.modules.auth import models as auth_models  # noqa: F401
+from app.modules.classrooms import models as classroom_models  # noqa: F401
 
 config = context.config
 config.set_main_option("sqlalchemy.url", settings.sqlalchemy_database_uri)
