@@ -14,6 +14,9 @@ class QuestionType(StrEnum):
 
 class QuestionStatus(StrEnum):
     EMPTY = "empty"
+    DRAFT = "draft"
+    EXTRACTED = "extracted"
+    CONFIRMED = "confirmed"
 
 
 class QuestionSourceType(StrEnum):
