@@ -11,3 +11,17 @@ class SubmissionStatus(StrEnum):
     APPROVED = "approved"
     PUBLISHED = "published"
 
+
+SUBMITTED_OR_LATER_STATUSES = {
+    SubmissionStatus.SUBMITTED.value,
+    SubmissionStatus.AUTO_GRADED.value,
+    SubmissionStatus.NEEDS_REVIEW.value,
+    SubmissionStatus.TEACHER_REVIEWED.value,
+    SubmissionStatus.APPROVED.value,
+    SubmissionStatus.PUBLISHED.value,
+}
+
+
+class ExamAccessStatus(StrEnum):
+    WAITING = "waiting"
+    READY = "ready"

@@ -2,7 +2,7 @@ from datetime import datetime
 from decimal import Decimal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class SubmissionRead(BaseModel):
@@ -50,3 +50,50 @@ class AnswerRead(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
+
+class ExamAccessRead(BaseModel):
+    status: str
+    exam_title: str
+    class_title: str
+    student_full_name: str
+    start_time: datetime
+    end_time: datetime
+    duration_minutes: int
+
+
+class StudentQuestionOptionRead(BaseModel):
+    option_key: str
+    option_text: str
+
+
+class StudentQuestionRead(BaseModel):
+    id: UUID
+    order_index: int
+    type: str
+    text: str
+    points: int
+    options: list[StudentQuestionOptionRead] = Field(default_factory=list)
+
+
+class ExamStartRead(BaseModel):
+    submission_id: UUID
+    started_at: datetime
+    allowed_until: datetime
+    questions: list[StudentQuestionRead]
+
+
+class ExamAnswerSubmit(BaseModel):
+    question_id: UUID
+    student_answer: str | None = Field(default=None, max_length=20000)
+    answer_data: dict | list | None = None
+
+
+class ExamSubmitRequest(BaseModel):
+    answers: list[ExamAnswerSubmit] = Field(default_factory=list)
+
+
+class ExamSubmitRead(BaseModel):
+    submission_id: UUID
+    status: str
+    submitted_at: datetime
+    saved_answers: int
