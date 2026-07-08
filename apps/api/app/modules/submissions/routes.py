@@ -47,4 +47,7 @@ def submit_exam(
     service: SubmissionService = Depends(get_submission_service),
 ) -> dict:
     submitted_exam = service.submit_exam(exam_token, payload)
-    return success_response(data=ExamSubmitRead.model_validate(submitted_exam).model_dump(mode="json"))
+    return success_response(
+        data=ExamSubmitRead.model_validate(submitted_exam).model_dump(mode="json"),
+        message="Your answers were submitted. Results will be available after teacher review.",
+    )

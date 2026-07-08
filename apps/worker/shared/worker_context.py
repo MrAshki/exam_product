@@ -25,6 +25,7 @@ from app.modules.exams import models as exam_models  # noqa: E402,F401
 from app.modules.notifications import models as notification_models  # noqa: E402,F401
 from app.modules.questions import models as question_models  # noqa: E402,F401
 from app.modules.students import models as student_models  # noqa: E402,F401
+from app.modules.submissions import models as submission_models  # noqa: E402,F401
 
 
 @contextmanager

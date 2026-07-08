@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.modules.exams.models import Exam, ExamToken
 from app.modules.exams.status import ExamStatus, QuestionType
+from app.modules.grading.service import GradingDispatchService
 from app.modules.questions.models import Question, QuestionOption
 from app.modules.submissions.errors import (
     exam_already_submitted,
@@ -147,6 +148,14 @@ class SubmissionService:
         except IntegrityError:
             self.repository.rollback()
             raise validation_error({"answers": ["Duplicate answers are not allowed."]}) from None
+
+        # Phase 11B will add AI grading dispatch for subjective answers.
+        GradingDispatchService(self.repository.db).enqueue_deterministic_grading(
+            teacher_id=token.teacher_id,
+            class_id=token.class_id,
+            exam_id=token.exam_id,
+            submission_id=saved_submission.id,
+        )
 
         return {
             "submission_id": saved_submission.id,

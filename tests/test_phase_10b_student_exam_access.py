@@ -14,6 +14,7 @@ from app.modules.classrooms.models import Classroom
 from app.modules.exams.models import Exam, ExamBlueprint, ExamToken
 from app.modules.exams.status import ExamStatus, QuestionStatus, QuestionType
 from app.modules.jobs.models import JobLog
+from app.modules.jobs.status import DETERMINISTIC_GRADING_QUEUE, JobStatus, JobType
 from app.modules.questions.models import Question, QuestionOption
 from app.modules.students.models import ClassStudent, Student
 from app.modules.submissions.models import Answer, Submission
@@ -458,7 +459,10 @@ def test_post_submit_does_not_grade_answers_yet() -> None:
     assert answer.teacher_score is None
     assert answer.final_score is None
     assert submission.total_score is None
-    assert jobs == []
+    assert len(jobs) == 1
+    assert jobs[0].job_type == JobType.DETERMINISTIC_GRADING.value
+    assert jobs[0].queue_name == DETERMINISTIC_GRADING_QUEUE
+    assert jobs[0].status == JobStatus.QUEUED.value
 
 
 def test_token_cannot_access_another_students_submission() -> None:
