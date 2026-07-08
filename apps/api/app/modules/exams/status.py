@@ -3,6 +3,7 @@ from enum import StrEnum
 
 class ExamStatus(StrEnum):
     DRAFT = "draft"
+    SCHEDULED = "scheduled"
 
 
 class QuestionType(StrEnum):

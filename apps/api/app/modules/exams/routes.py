@@ -12,7 +12,11 @@ from app.modules.exams.schemas import (
     BlueprintRead,
     BlueprintUpdate,
     ExamCreate,
+    ExamInvitationRead,
+    ExamInvitationRequest,
     ExamRead,
+    ExamScheduleRead,
+    ExamScheduleRequest,
     ExamUpdate,
 )
 from app.modules.exams.service import ExamService
@@ -79,6 +83,36 @@ def delete_exam(
 ) -> dict:
     service.delete(class_id, exam_id, teacher)
     return success_response(data={})
+
+
+@router.post("/{exam_id}/schedule")
+def schedule_exam(
+    class_id: UUID,
+    exam_id: UUID,
+    payload: ExamScheduleRequest,
+    teacher: User = Depends(get_current_teacher),
+    service: ExamService = Depends(get_exam_service),
+) -> dict:
+    result = service.schedule(class_id, exam_id, payload, teacher)
+    return success_response(
+        data=ExamScheduleRead.model_validate(result).model_dump(mode="json"),
+        message="Exam scheduled successfully.",
+    )
+
+
+@router.post("/{exam_id}/send-invitations")
+def send_exam_invitations(
+    class_id: UUID,
+    exam_id: UUID,
+    payload: ExamInvitationRequest,
+    teacher: User = Depends(get_current_teacher),
+    service: ExamService = Depends(get_exam_service),
+) -> dict:
+    result = service.send_invitations(class_id, exam_id, payload, teacher)
+    return success_response(
+        data=ExamInvitationRead.model_validate(result).model_dump(mode="json"),
+        message="Invitation emails queued successfully.",
+    )
 
 
 @router.post("/{exam_id}/blueprint", status_code=status.HTTP_201_CREATED)

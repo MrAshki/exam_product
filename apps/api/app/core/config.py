@@ -11,6 +11,7 @@ class Settings(BaseSettings):
     SECRET_KEY: str
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
     COOKIE_NAME: str = "exam_access_token"
+    FRONTEND_BASE_URL: str = "http://localhost:3000"
 
     POSTGRES_HOST: str = "localhost"
     POSTGRES_PORT: int = 5432

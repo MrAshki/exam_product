@@ -4,7 +4,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.modules.classrooms.models import Classroom
-from app.modules.exams.models import Exam, ExamBlueprint
+from app.modules.exams.models import Exam, ExamBlueprint, ExamToken
 from app.modules.questions.models import Question, QuestionOption
 from app.modules.students.models import ClassStudent, Student
 
@@ -39,6 +39,25 @@ class ExamRepository:
             .limit(1)
         )
         return self.db.scalar(statement) is not None
+
+    def list_active_students_for_class(
+        self,
+        class_id: UUID,
+        teacher_id: UUID,
+    ) -> list[Student]:
+        statement = (
+            select(Student)
+            .join(ClassStudent, ClassStudent.student_id == Student.id)
+            .where(
+                ClassStudent.class_id == class_id,
+                ClassStudent.deleted_at.is_(None),
+                Student.teacher_id == teacher_id,
+                Student.deleted_at.is_(None),
+                Student.is_active.is_(True),
+            )
+            .order_by(Student.created_at.asc())
+        )
+        return list(self.db.scalars(statement).all())
 
     def list_by_class_for_teacher(
         self,
@@ -99,6 +118,13 @@ class ExamRepository:
         self.db.refresh(exam)
         return exam
 
+    def save_exam_with_tokens(self, exam: Exam, tokens: list[ExamToken]) -> Exam:
+        self.db.add(exam)
+        self.db.add_all(tokens)
+        self.db.commit()
+        self.db.refresh(exam)
+        return exam
+
     def get_blueprint_for_exam(
         self,
         exam_id: UUID,
@@ -131,6 +157,57 @@ class ExamRepository:
             .limit(1)
         )
         return self.db.scalar(statement) is not None
+
+    def list_questions_for_exam(
+        self,
+        exam_id: UUID,
+        class_id: UUID,
+        teacher_id: UUID,
+    ) -> list[Question]:
+        return self._active_questions_for_exam(exam_id, class_id, teacher_id)
+
+    def list_options_for_exam(
+        self,
+        exam_id: UUID,
+        class_id: UUID,
+        teacher_id: UUID,
+    ) -> list[QuestionOption]:
+        statement = (
+            select(QuestionOption)
+            .where(
+                QuestionOption.exam_id == exam_id,
+                QuestionOption.class_id == class_id,
+                QuestionOption.teacher_id == teacher_id,
+                QuestionOption.deleted_at.is_(None),
+            )
+            .order_by(QuestionOption.option_key.asc())
+        )
+        return list(self.db.scalars(statement).all())
+
+    def list_active_tokens_for_exam(
+        self,
+        exam_id: UUID,
+        class_id: UUID,
+        teacher_id: UUID,
+    ) -> list[ExamToken]:
+        statement = select(ExamToken).where(
+            ExamToken.exam_id == exam_id,
+            ExamToken.class_id == class_id,
+            ExamToken.teacher_id == teacher_id,
+            ExamToken.deleted_at.is_(None),
+        )
+        return list(self.db.scalars(statement).all())
+
+    def token_exists(self, token: str) -> bool:
+        statement = select(ExamToken.id).where(ExamToken.token == token).limit(1)
+        return self.db.scalar(statement) is not None
+
+    def create_tokens(self, tokens: list[ExamToken]) -> list[ExamToken]:
+        self.db.add_all(tokens)
+        self.db.commit()
+        for token in tokens:
+            self.db.refresh(token)
+        return tokens
 
     def create_blueprint_with_slots(
         self,

@@ -88,3 +88,53 @@ class ExamBlueprint(BaseModelMixin, Base):
     teacher = relationship("User")
     classroom = relationship("Classroom")
     exam = relationship("Exam")
+
+
+class ExamToken(BaseModelMixin, Base):
+    __tablename__ = "exam_tokens"
+
+    @declared_attr.directive
+    def __table_args__(cls) -> tuple[Index, ...]:
+        return (
+            Index("idx_exam_tokens_token", "token"),
+            Index("idx_exam_tokens_exam_student", "exam_id", "student_id"),
+            Index("idx_exam_tokens_class_id", "class_id"),
+            Index("idx_exam_tokens_deleted_at", "deleted_at"),
+            Index(
+                "uq_exam_tokens_exam_student_active",
+                "exam_id",
+                "student_id",
+                unique=True,
+                postgresql_where=cls.deleted_at.is_(None),
+            ),
+        )
+
+    teacher_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    class_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("classes.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    exam_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("exams.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    student_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("students.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    token: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    teacher = relationship("User")
+    classroom = relationship("Classroom")
+    exam = relationship("Exam")
+    student = relationship("Student")

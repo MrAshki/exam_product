@@ -13,6 +13,13 @@ class ExamErrorCode:
     EXAM_TITLE_ALREADY_EXISTS = "EXAM_TITLE_ALREADY_EXISTS"
     BLUEPRINT_NOT_FOUND = "BLUEPRINT_NOT_FOUND"
     QUESTION_NOT_FOUND = "QUESTION_NOT_FOUND"
+    EXAM_NOT_READY = "EXAM_NOT_READY"
+    EXAM_ALREADY_SCHEDULED = "EXAM_ALREADY_SCHEDULED"
+    EXAM_NOT_SCHEDULED = "EXAM_NOT_SCHEDULED"
+    STUDENT_NOT_IN_CLASS = "STUDENT_NOT_IN_CLASS"
+    VALIDATION_ERROR = "VALIDATION_ERROR"
+    FORBIDDEN = "FORBIDDEN"
+    EMAIL_SEND_FAILED = "EMAIL_SEND_FAILED"
 
 
 def class_not_found() -> AppException:
@@ -84,4 +91,55 @@ def question_not_found() -> AppException:
         code=ExamErrorCode.QUESTION_NOT_FOUND,
         message="Question was not found.",
         status_code=status.HTTP_404_NOT_FOUND,
+    )
+
+
+def exam_not_ready(details: dict | None = None) -> AppException:
+    return AppException(
+        code=ExamErrorCode.EXAM_NOT_READY,
+        message="Exam is not ready to be scheduled.",
+        status_code=status.HTTP_409_CONFLICT,
+        details=details,
+    )
+
+
+def exam_already_scheduled() -> AppException:
+    return AppException(
+        code=ExamErrorCode.EXAM_ALREADY_SCHEDULED,
+        message="Exam is already scheduled.",
+        status_code=status.HTTP_409_CONFLICT,
+    )
+
+
+def exam_not_scheduled() -> AppException:
+    return AppException(
+        code=ExamErrorCode.EXAM_NOT_SCHEDULED,
+        message="Exam must be scheduled before invitations can be sent.",
+        status_code=status.HTTP_409_CONFLICT,
+    )
+
+
+def student_not_in_class() -> AppException:
+    return AppException(
+        code=ExamErrorCode.STUDENT_NOT_IN_CLASS,
+        message="Student was not found in this class.",
+        status_code=status.HTTP_404_NOT_FOUND,
+    )
+
+
+def validation_error(details: dict | None = None) -> AppException:
+    return AppException(
+        code=ExamErrorCode.VALIDATION_ERROR,
+        message="Request validation failed.",
+        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        details=details,
+    )
+
+
+def email_send_failed(details: dict | None = None) -> AppException:
+    return AppException(
+        code=ExamErrorCode.EMAIL_SEND_FAILED,
+        message="Invitation emails could not be queued.",
+        status_code=status.HTTP_502_BAD_GATEWAY,
+        details=details,
     )

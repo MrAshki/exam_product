@@ -51,7 +51,8 @@ class NotificationService:
             job_type=JobType.EMAIL_SEND.value,
             queue_name=EMAIL_QUEUE,
             status=JobStatus.QUEUED.value,
-            entity_type="email",
+            entity_type=email_type,
+            entity_id=exam_id,
             payload_json=payload,
         )
 
@@ -84,4 +85,3 @@ class NotificationService:
         except SQLAlchemyError as exc:
             self.repository.rollback()
             raise job_update_failed() from exc
-

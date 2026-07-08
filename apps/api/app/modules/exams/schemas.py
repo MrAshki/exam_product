@@ -85,6 +85,37 @@ class ExamRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class ExamScheduleRequest(BaseModel):
+    start_time: datetime
+    end_time: datetime
+    duration_minutes: int = Field(gt=0)
+
+    @field_validator("end_time")
+    @classmethod
+    def end_time_must_be_after_start_time(cls, value: datetime, info) -> datetime:
+        start_time = info.data.get("start_time")
+        if start_time is not None and value <= start_time:
+            raise ValueError("End time must be after start time.")
+        return value
+
+
+class ExamScheduleRead(BaseModel):
+    id: UUID
+    status: str
+    start_time: datetime
+    end_time: datetime
+    duration_minutes: int
+    created_exam_tokens: int
+
+
+class ExamInvitationRequest(BaseModel):
+    send_to_all: bool = True
+
+
+class ExamInvitationRead(BaseModel):
+    queued_emails: int
+
+
 class BlueprintBase(BaseModel):
     multiple_choice_count: int = Field(default=0, ge=0)
     short_answer_count: int = Field(default=0, ge=0)
