@@ -1,3 +1,4 @@
+import json
 from typing import Any
 
 from app.modules.ai.providers import Provider, build_provider
@@ -19,4 +20,12 @@ class ModelGateway:
             task_name=task_name,
             prompt=prompt,
             metadata=metadata,
+        )
+
+    def run(self, task_name: str, payload: dict[str, Any]) -> GatewayResult:
+        prompt = json.dumps(payload, sort_keys=True, default=str)
+        return self.provider.generate_text(
+            task_name=task_name,
+            prompt=prompt,
+            metadata=payload,
         )

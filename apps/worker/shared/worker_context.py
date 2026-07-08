@@ -19,6 +19,7 @@ def ensure_api_path() -> None:
 ensure_api_path()
 
 from app.db.session import SessionLocal  # noqa: E402
+from app.modules.ai import logs as ai_logs  # noqa: E402,F401
 from app.modules.auth import models as auth_models  # noqa: E402,F401
 from app.modules.classrooms import models as classroom_models  # noqa: E402,F401
 from app.modules.exams import models as exam_models  # noqa: E402,F401

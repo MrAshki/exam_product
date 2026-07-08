@@ -149,13 +149,20 @@ class SubmissionService:
             self.repository.rollback()
             raise validation_error({"answers": ["Duplicate answers are not allowed."]}) from None
 
-        # Phase 11B will add AI grading dispatch for subjective answers.
-        GradingDispatchService(self.repository.db).enqueue_deterministic_grading(
+        grading_dispatch = GradingDispatchService(self.repository.db)
+        grading_dispatch.enqueue_deterministic_grading(
             teacher_id=token.teacher_id,
             class_id=token.class_id,
             exam_id=token.exam_id,
             submission_id=saved_submission.id,
         )
+        if self._has_subjective_answers(payload.answers, questions_by_id):
+            grading_dispatch.enqueue_ai_grading(
+                teacher_id=token.teacher_id,
+                class_id=token.class_id,
+                exam_id=token.exam_id,
+                submission_id=saved_submission.id,
+            )
 
         return {
             "submission_id": saved_submission.id,
@@ -304,6 +311,17 @@ class SubmissionService:
                 if active_question is not None and active_question.exam_id == exam_id:
                     raise question_not_confirmed({"question_id": str(answer.question_id)})
                 raise question_not_found({"question_id": str(answer.question_id)})
+
+    @staticmethod
+    def _has_subjective_answers(
+        submitted_answers: list[ExamAnswerSubmit],
+        questions_by_id: dict[UUID, Question],
+    ) -> bool:
+        subjective_types = {QuestionType.SHORT_ANSWER.value, QuestionType.ESSAY.value}
+        return any(
+            questions_by_id[answer.question_id].type in subjective_types
+            for answer in submitted_answers
+        )
 
     @staticmethod
     def _allowed_until(exam: Exam, submission: Submission) -> datetime:

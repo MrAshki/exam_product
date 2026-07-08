@@ -33,6 +33,25 @@ class MockProvider:
         prompt: str,
         metadata: dict[str, Any] | None = None,
     ) -> GatewayResult:
+        if task_name in {"short_answer_grading", "essay_grading"}:
+            max_score = float((metadata or {}).get("max_score") or (metadata or {}).get("points") or 0)
+            student_answer = str((metadata or {}).get("student_answer") or "").strip()
+            score = max_score if student_answer else 0.0
+            response = {
+                "score": score,
+                "feedback": "Mock AI grading feedback.",
+                "confidence": 0.9 if student_answer else 0.5,
+                "needs_review": False if student_answer else True,
+            }
+            text = json.dumps(response)
+            return GatewayResult(
+                text=text,
+                provider=self.name,
+                model=self.model,
+                raw_response=text,
+                response_json=response,
+            )
+
         if task_name != "suggest_essay_rubric":
             raise ai_task_not_supported(task_name)
         total_points = int((metadata or {}).get("total_points") or 10)
@@ -94,7 +113,7 @@ class GeminiProvider:
         prompt: str,
         metadata: dict[str, Any] | None = None,
     ) -> GatewayResult:
-        if task_name != "suggest_essay_rubric":
+        if task_name not in {"suggest_essay_rubric", "short_answer_grading", "essay_grading"}:
             raise ai_task_not_supported(task_name)
 
         url = (
