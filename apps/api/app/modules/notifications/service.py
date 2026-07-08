@@ -10,6 +10,7 @@ from app.modules.jobs.errors import job_enqueue_failed, job_update_failed
 from app.modules.jobs.models import JobLog
 from app.modules.jobs.repository import JobRepository
 from app.modules.jobs.status import EMAIL_QUEUE, JobStatus, JobType
+from app.modules.notifications.constants import EmailType
 
 
 EMAIL_SEND_TASK_NAME = "apps.worker.tasks.email_tasks.send_email"
@@ -55,7 +56,40 @@ class NotificationService:
             entity_id=exam_id,
             payload_json=payload,
         )
+        return self._create_and_enqueue(job, payload)
 
+    def enqueue_teacher_review_ready_email(
+        self,
+        *,
+        to_email: str,
+        template_payload: dict[str, Any],
+        teacher_id: UUID,
+        class_id: UUID,
+        exam_id: UUID,
+    ) -> JobLog:
+        payload = {
+            "email_type": EmailType.TEACHER_REVIEW_READY.value,
+            "teacher_id": str(teacher_id),
+            "class_id": str(class_id),
+            "exam_id": str(exam_id),
+            "student_id": None,
+            "to_email": to_email,
+            "template_payload": template_payload,
+        }
+        job = JobLog(
+            teacher_id=teacher_id,
+            class_id=class_id,
+            exam_id=exam_id,
+            job_type=JobType.EMAIL_SEND.value,
+            queue_name=EMAIL_QUEUE,
+            status=JobStatus.QUEUED.value,
+            entity_type="exam",
+            entity_id=exam_id,
+            payload_json=payload,
+        )
+        return self._create_and_enqueue(job, payload)
+
+    def _create_and_enqueue(self, job: JobLog, payload: dict[str, Any]) -> JobLog:
         try:
             job = self.repository.create(job)
         except SQLAlchemyError as exc:

@@ -4,6 +4,7 @@ from enum import StrEnum
 class ExamStatus(StrEnum):
     DRAFT = "draft"
     SCHEDULED = "scheduled"
+    REVIEW_REQUIRED = "review_required"
 
 
 class QuestionType(StrEnum):

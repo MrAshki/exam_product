@@ -13,6 +13,7 @@ from app.modules.ai.service import AIService
 from app.modules.classrooms.models import Classroom
 from app.modules.exams.models import Exam
 from app.modules.exams.status import QuestionStatus, QuestionType
+from app.modules.grading.review_decision import ReviewDecisionService
 from app.modules.jobs.models import JobLog
 from app.modules.jobs.status import JobStatus
 from app.modules.questions.models import Question
@@ -162,6 +163,13 @@ class DeterministicGradingWorkerService:
             submission.status = SubmissionStatus.AUTO_GRADED.value
         db.add(submission)
         db.commit()
+        review_result = ReviewDecisionService(db).evaluate_submission(
+            teacher_id=teacher_id,
+            class_id=class_id,
+            exam_id=exam_id,
+            submission_id=submission_id,
+        )
+        db.refresh(submission)
 
         return {
             "success": True,
@@ -170,6 +178,7 @@ class DeterministicGradingWorkerService:
             "status": submission.status,
             "total_score": str(submission.total_score) if submission.total_score is not None else None,
             "max_score": str(submission.max_score) if submission.max_score is not None else None,
+            "review_decision": review_result,
         }
 
     @staticmethod
@@ -418,6 +427,13 @@ class AIGradingWorkerService:
         self._update_submission_after_ai_grading(submission, answers, questions)
         db.add(submission)
         db.commit()
+        review_result = ReviewDecisionService(db).evaluate_submission(
+            teacher_id=teacher_id,
+            class_id=class_id,
+            exam_id=exam_id,
+            submission_id=submission_id,
+        )
+        db.refresh(submission)
 
         return {
             "success": True,
@@ -428,6 +444,7 @@ class AIGradingWorkerService:
             "total_score": str(submission.total_score) if submission.total_score is not None else None,
             "max_score": str(submission.max_score) if submission.max_score is not None else None,
             "needs_review_count": submission.needs_review_count,
+            "review_decision": review_result,
         }
 
     @staticmethod
