@@ -6,6 +6,7 @@ from app.modules.exams.routes import router as exams_router
 from app.modules.grading.routes import router as grading_router
 from app.modules.jobs.routes import router as jobs_router
 from app.modules.questions.routes import router as questions_router
+from app.modules.results.routes import router as results_router
 from app.modules.students.routes import router as students_router
 from app.modules.submissions.routes import router as submissions_router
 
@@ -35,3 +36,4 @@ api_v1_router.include_router(
     tags=["questions"],
 )
 api_v1_router.include_router(submissions_router, prefix="/exam", tags=["exam-access"])
+api_v1_router.include_router(results_router, tags=["results"])

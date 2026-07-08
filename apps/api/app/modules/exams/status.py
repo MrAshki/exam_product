@@ -6,6 +6,7 @@ class ExamStatus(StrEnum):
     SCHEDULED = "scheduled"
     REVIEW_REQUIRED = "review_required"
     APPROVED = "approved"
+    PUBLISHED = "published"
 
 
 class QuestionType(StrEnum):

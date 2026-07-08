@@ -455,5 +455,3 @@ def test_approve_results_sets_exam_and_submission_approved_without_publishing() 
     assert submission.status == SubmissionStatus.APPROVED.value
     assert submission.teacher_approved_at is not None
     assert submission.published_at is None
-    assert not inspect(engine).has_table("result_tokens")
-    assert not inspect(engine).has_table("leaderboard_tokens")

@@ -2,7 +2,14 @@ from celery import Celery
 from kombu import Queue
 
 from apps.worker.config import CELERY_BROKER_URL, CELERY_RESULT_BACKEND
-from apps.worker.queues import ALL_QUEUES, AI_GRADING_QUEUE, DEFAULT_QUEUE, DETERMINISTIC_GRADING_QUEUE, EMAIL_QUEUE
+from apps.worker.queues import (
+    AI_GRADING_QUEUE,
+    ALL_QUEUES,
+    DEFAULT_QUEUE,
+    DETERMINISTIC_GRADING_QUEUE,
+    EMAIL_QUEUE,
+    LEADERBOARD_QUEUE,
+)
 
 
 celery_app = Celery(
@@ -28,6 +35,7 @@ celery_app.conf.update(
         },
         "apps.worker.tasks.ai_grading_tasks.grade_subjective_submission": {"queue": AI_GRADING_QUEUE},
         "apps.worker.tasks.email_tasks.send_email": {"queue": EMAIL_QUEUE},
+        "apps.worker.tasks.leaderboard_tasks.update_leaderboard": {"queue": LEADERBOARD_QUEUE},
     },
     task_serializer="json",
     accept_content=["json"],
