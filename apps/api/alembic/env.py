@@ -13,6 +13,7 @@ from app.modules.jobs import models as job_models  # noqa: F401
 from app.modules.notifications import models as notification_models  # noqa: F401
 from app.modules.questions import models as question_models  # noqa: F401
 from app.modules.students import models as student_models  # noqa: F401
+from app.modules.submissions import models as submission_models  # noqa: F401
 
 config = context.config
 config.set_main_option("sqlalchemy.url", settings.sqlalchemy_database_uri)
