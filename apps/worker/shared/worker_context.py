@@ -22,7 +22,9 @@ from app.db.session import SessionLocal  # noqa: E402
 from app.modules.auth import models as auth_models  # noqa: E402,F401
 from app.modules.classrooms import models as classroom_models  # noqa: E402,F401
 from app.modules.exams import models as exam_models  # noqa: E402,F401
+from app.modules.notifications import models as notification_models  # noqa: E402,F401
 from app.modules.questions import models as question_models  # noqa: E402,F401
+from app.modules.students import models as student_models  # noqa: E402,F401
 
 
 @contextmanager

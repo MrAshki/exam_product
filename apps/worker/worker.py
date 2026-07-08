@@ -2,7 +2,7 @@ from celery import Celery
 from kombu import Queue
 
 from apps.worker.config import CELERY_BROKER_URL, CELERY_RESULT_BACKEND
-from apps.worker.queues import ALL_QUEUES, DEFAULT_QUEUE
+from apps.worker.queues import ALL_QUEUES, DEFAULT_QUEUE, EMAIL_QUEUE
 
 
 celery_app = Celery(
@@ -23,6 +23,7 @@ celery_app.conf.update(
     task_queues=tuple(Queue(queue_name) for queue_name in ALL_QUEUES),
     task_routes={
         "apps.worker.tasks.test_tasks.test_ping": {"queue": DEFAULT_QUEUE},
+        "apps.worker.tasks.email_tasks.send_email": {"queue": EMAIL_QUEUE},
     },
     task_serializer="json",
     accept_content=["json"],
@@ -30,4 +31,3 @@ celery_app.conf.update(
     timezone="UTC",
     enable_utc=True,
 )
-

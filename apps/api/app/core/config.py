@@ -31,6 +31,15 @@ class Settings(BaseSettings):
     GEMINI_API_KEY: str | None = Field(default=None)
     AI_TIMEOUT_SECONDS: int = 30
 
+    EMAIL_PROVIDER: str = "mock"
+    SMTP_HOST: str = ""
+    SMTP_PORT: int = 587
+    SMTP_USERNAME: str = ""
+    SMTP_PASSWORD: str = ""
+    SMTP_FROM_EMAIL: str = ""
+    SMTP_FROM_NAME: str = ""
+    SMTP_USE_TLS: bool = True
+
     model_config = SettingsConfigDict(
         env_file=(".env", "../../.env"),
         env_file_encoding="utf-8",

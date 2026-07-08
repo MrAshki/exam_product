@@ -10,6 +10,7 @@ from app.modules.auth import models as auth_models  # noqa: F401
 from app.modules.classrooms import models as classroom_models  # noqa: F401
 from app.modules.exams import models as exam_models  # noqa: F401
 from app.modules.jobs import models as job_models  # noqa: F401
+from app.modules.notifications import models as notification_models  # noqa: F401
 from app.modules.questions import models as question_models  # noqa: F401
 from app.modules.students import models as student_models  # noqa: F401
 
