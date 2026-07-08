@@ -5,6 +5,7 @@ class ExamStatus(StrEnum):
     DRAFT = "draft"
     SCHEDULED = "scheduled"
     REVIEW_REQUIRED = "review_required"
+    APPROVED = "approved"
 
 
 class QuestionType(StrEnum):
