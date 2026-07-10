@@ -22,6 +22,7 @@ export function StudentTable({ students, onEdit, onRemove }: StudentTableProps) 
           <TableHeader>ایمیل</TableHeader>
           <TableHeader>کد</TableHeader>
           <TableHeader>وضعیت</TableHeader>
+          <TableHeader>یادداشت</TableHeader>
           <TableHeader className="w-40">عملیات</TableHeader>
         </TableRow>
       </TableHead>
@@ -33,6 +34,9 @@ export function StudentTable({ students, onEdit, onRemove }: StudentTableProps) 
             <TableCell>{student.student_code || "—"}</TableCell>
             <TableCell>
               <Badge>{student.is_active ? "فعال" : "غیرفعال"}</Badge>
+            </TableCell>
+            <TableCell className="max-w-xs">
+              <span className="line-clamp-2">{student.teacher_note || "—"}</span>
             </TableCell>
             <TableCell>
               <div className="flex gap-2">

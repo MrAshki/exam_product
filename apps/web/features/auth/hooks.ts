@@ -1,44 +1,43 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 
-import { getCurrentUser, login, logout, register } from "@/features/auth/api";
-import { authQueryKeys } from "@/lib/auth";
+import { login, logout, register } from "@/features/auth/api";
+import { useAuth } from "@/features/auth/auth-provider";
 import { routes } from "@/lib/routes";
 import type { LoginPayload, RegisterPayload } from "@/types/auth";
 
 export function useCurrentUser() {
-  return useQuery({
-    queryKey: authQueryKeys.currentUser,
-    queryFn: getCurrentUser,
-    retry: false
-  });
+  return useAuth();
+}
+
+export function useProtectedQueryEnabled() {
+  return useAuth().isAuthenticated;
 }
 
 export function useLogin() {
-  const queryClient = useQueryClient();
   const router = useRouter();
+  const auth = useAuth();
 
   return useMutation({
     mutationFn: (payload: LoginPayload) => login(payload),
-    onSuccess: async (user) => {
-      queryClient.setQueryData(authQueryKeys.currentUser, user);
-      await queryClient.invalidateQueries({ queryKey: authQueryKeys.currentUser });
+    onSuccess: (user) => {
+      auth.setAuthenticated(user);
       router.replace(routes.dashboard);
     }
   });
 }
 
 export function useRegister() {
-  const queryClient = useQueryClient();
   const router = useRouter();
+  const auth = useAuth();
 
   return useMutation({
     mutationFn: (payload: RegisterPayload) => register(payload),
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: authQueryKeys.currentUser });
-      router.replace(routes.login);
+    onSuccess: (user) => {
+      auth.setAuthenticated(user);
+      router.replace(routes.dashboard);
     }
   });
 }
@@ -46,11 +45,17 @@ export function useRegister() {
 export function useLogout() {
   const queryClient = useQueryClient();
   const router = useRouter();
+  const auth = useAuth();
 
   return useMutation({
     mutationFn: logout,
-    onSuccess: async () => {
-      queryClient.removeQueries({ queryKey: authQueryKeys.currentUser });
+    onMutate: () => {
+      auth.clearAuth();
+      void queryClient.cancelQueries();
+    },
+    onSettled: () => {
+      queryClient.clear();
+      auth.clearAuth();
       router.replace(routes.login);
     }
   });

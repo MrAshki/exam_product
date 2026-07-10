@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
+import { useProtectedQueryEnabled } from "@/features/auth/hooks";
 import { createExam, deleteExam, listExams, updateExam } from "@/features/exams/api";
 import type { ExamPayload } from "@/types/exam";
 
@@ -8,10 +9,12 @@ export const examQueryKeys = {
 };
 
 export function useExams(classId: string) {
+  const enabled = useProtectedQueryEnabled();
+
   return useQuery({
     queryKey: examQueryKeys.list(classId),
     queryFn: () => listExams(classId),
-    enabled: Boolean(classId)
+    enabled: enabled && Boolean(classId)
   });
 }
 

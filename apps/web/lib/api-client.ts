@@ -1,6 +1,6 @@
 import type { ApiEnvelope, ApiFailure, ApiSuccess } from "@/types/api";
 
-const DEFAULT_API_BASE_URL = "http://127.0.0.1:8000/api/v1";
+const DEFAULT_API_BASE_URL = "http://localhost:8081/api/v1";
 
 type QueryValue = string | number | boolean | null | undefined;
 
@@ -8,6 +8,7 @@ type RequestOptions = {
   body?: unknown;
   query?: Record<string, QueryValue | QueryValue[]>;
   headers?: HeadersInit;
+  skipUnauthorizedHandler?: boolean;
 };
 
 export type { ApiFailure, ApiSuccess };
@@ -34,6 +35,14 @@ export class ApiError extends Error {
     this.details = details;
     this.status = status;
   }
+}
+
+type UnauthorizedHandler = (error: ApiError) => void;
+
+let unauthorizedHandler: UnauthorizedHandler | null = null;
+
+export function setUnauthorizedHandler(handler: UnauthorizedHandler | null) {
+  unauthorizedHandler = handler;
 }
 
 function getApiBaseUrl(): string {
@@ -83,24 +92,30 @@ async function request<T>(method: string, path: string, options: RequestOptions 
 
   if (!response.ok || envelope.success === false) {
     const failure = envelope as ApiFailure;
-    throw new ApiError({
+    const error = new ApiError({
       code: failure.error?.code || "API_REQUEST_FAILED",
       message: failure.error?.message || "درخواست با خطا مواجه شد.",
       details: failure.error?.details,
       status: response.status
     });
+
+    if (response.status === 401 && !options.skipUnauthorizedHandler) {
+      unauthorizedHandler?.(error);
+    }
+
+    throw error;
   }
 
   return (envelope as ApiSuccess<T>).data;
 }
 
 export const apiClient = {
-  get: <T>(path: string, options?: Pick<RequestOptions, "query" | "headers">) =>
+  get: <T>(path: string, options?: Pick<RequestOptions, "query" | "headers" | "skipUnauthorizedHandler">) =>
     request<T>("GET", path, options),
-  post: <T>(path: string, body?: unknown, options?: Pick<RequestOptions, "query" | "headers">) =>
+  post: <T>(path: string, body?: unknown, options?: Pick<RequestOptions, "query" | "headers" | "skipUnauthorizedHandler">) =>
     request<T>("POST", path, { ...options, body }),
-  put: <T>(path: string, body?: unknown, options?: Pick<RequestOptions, "query" | "headers">) =>
+  put: <T>(path: string, body?: unknown, options?: Pick<RequestOptions, "query" | "headers" | "skipUnauthorizedHandler">) =>
     request<T>("PUT", path, { ...options, body }),
-  delete: <T>(path: string, options?: Pick<RequestOptions, "query" | "headers">) =>
+  delete: <T>(path: string, options?: Pick<RequestOptions, "query" | "headers" | "skipUnauthorizedHandler">) =>
     request<T>("DELETE", path, options)
 };

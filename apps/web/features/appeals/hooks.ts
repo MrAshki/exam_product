@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
+import { useProtectedQueryEnabled } from "@/features/auth/hooks";
 import { getClassAppeal, listClassAppeals, resolveClassAppeal } from "@/features/appeals/api";
 import type { AppealListParams, AppealResolvePayload } from "@/types/appeal";
 
@@ -9,18 +10,22 @@ export const appealQueryKeys = {
 };
 
 export function useClassAppeals(classId: string, params: AppealListParams = {}) {
+  const enabled = useProtectedQueryEnabled();
+
   return useQuery({
     queryKey: appealQueryKeys.list(classId, params),
     queryFn: () => listClassAppeals(classId, params),
-    enabled: Boolean(classId)
+    enabled: enabled && Boolean(classId)
   });
 }
 
 export function useClassAppeal(classId: string, appealId: string) {
+  const enabled = useProtectedQueryEnabled();
+
   return useQuery({
     queryKey: appealQueryKeys.detail(classId, appealId),
     queryFn: () => getClassAppeal(classId, appealId),
-    enabled: Boolean(classId && appealId)
+    enabled: enabled && Boolean(classId && appealId)
   });
 }
 

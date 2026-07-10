@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
+import { useProtectedQueryEnabled } from "@/features/auth/hooks";
 import { createClass, deleteClass, getClass, listClasses, updateClass } from "@/features/classes/api";
 import type { ClassroomPayload } from "@/types/class";
 
@@ -9,17 +10,22 @@ export const classQueryKeys = {
 };
 
 export function useClasses() {
+  const enabled = useProtectedQueryEnabled();
+
   return useQuery({
     queryKey: classQueryKeys.all,
-    queryFn: listClasses
+    queryFn: listClasses,
+    enabled
   });
 }
 
 export function useClass(classId: string) {
+  const enabled = useProtectedQueryEnabled();
+
   return useQuery({
     queryKey: classQueryKeys.detail(classId),
     queryFn: () => getClass(classId),
-    enabled: Boolean(classId)
+    enabled: enabled && Boolean(classId)
   });
 }
 

@@ -21,17 +21,22 @@ class AuthService:
     def __init__(self, db: Session) -> None:
         self.repository = AuthRepository(db)
 
-    def register(self, payload: UserRegister) -> User:
+    def register(self, payload: UserRegister) -> tuple[User, str]:
         email = payload.email.lower()
         existing_user = self.repository.get_by_email(email)
         if existing_user is not None:
             raise email_already_registered()
 
-        return self.repository.create_teacher(
+        user = self.repository.create_teacher(
             full_name=payload.full_name.strip(),
             email=email,
             password_hash=hash_password(payload.password),
         )
+        token = create_access_token(
+            subject=str(user.id),
+            expires_delta=timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES),
+        )
+        return user, token
 
     def login(self, payload: UserLogin) -> tuple[User, str]:
         user = self.repository.get_by_email(payload.email.lower())

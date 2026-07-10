@@ -4,14 +4,12 @@ import { ArrowLeft, LayoutDashboard } from "lucide-react";
 import Link from "next/link";
 
 import { Card } from "@/components/ui/card";
-import { Spinner } from "@/components/ui/spinner";
 import { appConfig } from "@/config/app-config";
 import { useCurrentUser } from "@/features/auth/hooks";
 import { routes } from "@/lib/routes";
 
 export default function HomePage() {
-  const currentUser = useCurrentUser();
-  const isAuthenticated = currentUser.isSuccess;
+  const { isAuthenticated } = useCurrentUser();
 
   return (
     <main className="flex min-h-screen items-center justify-center bg-surface px-4 py-10">
@@ -24,11 +22,7 @@ export default function HomePage() {
           پایه فرانت‌اند برای ورود، ثبت‌نام و داشبورد معلم آماده شده است.
         </p>
         <Card className="mx-auto mt-8 max-w-xl">
-          {currentUser.isLoading ? (
-            <div className="flex justify-center py-4">
-              <Spinner />
-            </div>
-          ) : isAuthenticated ? (
+          {isAuthenticated ? (
             <div className="space-y-4">
               <p className="text-sm text-ink-500">شما وارد شده‌اید.</p>
               <Link

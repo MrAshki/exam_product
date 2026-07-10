@@ -14,6 +14,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
 import { LoadingBlock } from "@/components/ui/loading-block";
 import { AuthGuard } from "@/features/auth/components/auth-guard";
+import { ClassNavigation } from "@/features/classes/components/class-navigation";
 import { useClass } from "@/features/classes/hooks";
 import { StudentForm } from "@/features/students/components/student-form";
 import { StudentTable } from "@/features/students/components/student-table";
@@ -34,6 +35,7 @@ function StudentsContent() {
   const [createOpen, setCreateOpen] = useState(false);
   const [editingStudent, setEditingStudent] = useState<Student | null>(null);
   const [removingStudent, setRemovingStudent] = useState<Student | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const pageSize = 20;
   const classroom = useClass(classId);
   const students = useStudents(classId, page, pageSize, search);
@@ -52,17 +54,31 @@ function StudentsContent() {
   };
 
   function handleCreate(payload: StudentPayload) {
+    if (createStudent.isPending) {
+      return;
+    }
+
+    setSuccessMessage(null);
     createStudent.mutate(payload, {
       onSuccess: () => {
         setPage(1);
         closeCreate();
+        setSuccessMessage("دانش‌آموز به این کلاس اضافه شد.");
       }
     });
   }
 
   function handleUpdate(payload: StudentPayload) {
+    if (updateStudent.isPending) {
+      return;
+    }
+
+    setSuccessMessage(null);
     updateStudent.mutate(payload, {
-      onSuccess: closeEdit
+      onSuccess: () => {
+        closeEdit();
+        setSuccessMessage("اطلاعات دانش‌آموز ذخیره شد.");
+      }
     });
   }
 
@@ -71,8 +87,12 @@ function StudentsContent() {
       return;
     }
 
+    setSuccessMessage(null);
     removeStudent.mutate(removingStudent.id, {
-      onSuccess: () => setRemovingStudent(null)
+      onSuccess: () => {
+        setRemovingStudent(null);
+        setSuccessMessage("دانش‌آموز از این کلاس حذف شد.");
+      }
     });
   }
 
@@ -88,6 +108,7 @@ function StudentsContent() {
           </Button>
         }
       />
+      <ClassNavigation classId={classId} active="students" />
       <div className="flex flex-wrap items-center justify-between gap-3">
         <Link href={routes.classDetail(classId)}>
           <Button variant="secondary">
@@ -110,6 +131,7 @@ function StudentsContent() {
       </div>
 
       {classroom.isError ? <Alert variant="error">{getErrorMessage(classroom.error)}</Alert> : null}
+      {successMessage ? <Alert variant="success">{successMessage}</Alert> : null}
       {students.isLoading ? <LoadingBlock label="در حال دریافت دانش‌آموزان" /> : null}
       {students.isError ? <Alert variant="error">{getErrorMessage(students.error)}</Alert> : null}
       {removeStudent.isError ? <Alert variant="error">{getErrorMessage(removeStudent.error)}</Alert> : null}

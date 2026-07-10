@@ -15,12 +15,38 @@ def get_auth_service(db: Session = Depends(get_db)) -> AuthService:
     return AuthService(db)
 
 
+def set_auth_cookie(response: Response, token: str) -> None:
+    response.set_cookie(
+        key=settings.COOKIE_NAME,
+        value=token,
+        httponly=True,
+        max_age=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+        samesite=settings.COOKIE_SAMESITE,
+        secure=settings.COOKIE_SECURE,
+        path=settings.COOKIE_PATH,
+        domain=settings.cookie_domain,
+    )
+
+
+def clear_auth_cookie(response: Response) -> None:
+    response.delete_cookie(
+        key=settings.COOKIE_NAME,
+        httponly=True,
+        samesite=settings.COOKIE_SAMESITE,
+        secure=settings.COOKIE_SECURE,
+        path=settings.COOKIE_PATH,
+        domain=settings.cookie_domain,
+    )
+
+
 @router.post("/register", status_code=status.HTTP_201_CREATED)
 def register(
     payload: UserRegister,
+    response: Response,
     service: AuthService = Depends(get_auth_service),
 ) -> dict:
-    user = service.register(payload)
+    user, token = service.register(payload)
+    set_auth_cookie(response, token)
     return success_response(data=UserRead.model_validate(user).model_dump(mode="json"))
 
 
@@ -31,23 +57,13 @@ def login(
     service: AuthService = Depends(get_auth_service),
 ) -> dict:
     user, token = service.login(payload)
-    response.set_cookie(
-        key=settings.COOKIE_NAME,
-        value=token,
-        httponly=True,
-        max_age=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
-        samesite="lax",
-    )
+    set_auth_cookie(response, token)
     return success_response(data=UserRead.model_validate(user).model_dump(mode="json"))
 
 
 @router.post("/logout")
 def logout(response: Response) -> dict:
-    response.delete_cookie(
-        key=settings.COOKIE_NAME,
-        httponly=True,
-        samesite="lax",
-    )
+    clear_auth_cookie(response)
     return success_response(data={})
 
 

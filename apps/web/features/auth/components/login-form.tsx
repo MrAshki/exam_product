@@ -2,6 +2,8 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 
@@ -9,7 +11,7 @@ import { FormError } from "@/components/common/form-error";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { useLogin } from "@/features/auth/hooks";
+import { useCurrentUser, useLogin } from "@/features/auth/hooks";
 import { getErrorMessage } from "@/lib/errors";
 import { routes } from "@/lib/routes";
 
@@ -22,6 +24,8 @@ type LoginFormValues = z.infer<typeof loginSchema>;
 
 export function LoginForm() {
   const login = useLogin();
+  const auth = useCurrentUser();
+  const router = useRouter();
   const {
     register,
     handleSubmit,
@@ -34,13 +38,26 @@ export function LoginForm() {
     }
   });
 
+  useEffect(() => {
+    if (auth.isAuthenticated) {
+      router.replace(routes.dashboard);
+    }
+  }, [auth.isAuthenticated, router]);
+
   return (
     <Card className="w-full max-w-md">
       <div className="mb-6">
         <h1 className="text-2xl font-semibold text-ink-900">ورود معلم</h1>
         <p className="mt-2 text-sm text-ink-500">برای ادامه وارد حساب خود شوید.</p>
       </div>
-      <form className="space-y-4" onSubmit={handleSubmit((values) => login.mutate(values))}>
+      <form
+        className="space-y-4"
+        onSubmit={handleSubmit((values) => {
+          if (!login.isPending) {
+            login.mutate(values);
+          }
+        })}
+      >
         <FormError message={login.isError ? getErrorMessage(login.error) : null} />
         <label className="block space-y-2">
           <span className="text-sm font-medium text-ink-700">ایمیل</span>

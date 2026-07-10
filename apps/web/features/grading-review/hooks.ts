@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
+import { useProtectedQueryEnabled } from "@/features/auth/hooks";
 import { examQueryKeys } from "@/features/exams/hooks";
 import { approveResults, getExamReview, publishResults, reviewAnswer } from "@/features/grading-review/api";
 import { builderQueryKeys } from "@/features/question-builder/hooks";
@@ -20,10 +21,12 @@ function useInvalidateReview(classId: string, examId: string) {
 }
 
 export function useExamReview(classId: string, examId: string) {
+  const enabled = useProtectedQueryEnabled();
+
   return useQuery({
     queryKey: reviewQueryKeys.detail(classId, examId),
     queryFn: () => getExamReview(classId, examId),
-    enabled: Boolean(classId && examId),
+    enabled: enabled && Boolean(classId && examId),
     retry: false
   });
 }

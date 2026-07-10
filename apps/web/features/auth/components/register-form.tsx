@@ -2,6 +2,8 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 
@@ -9,7 +11,7 @@ import { FormError } from "@/components/common/form-error";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { useRegister } from "@/features/auth/hooks";
+import { useCurrentUser, useRegister } from "@/features/auth/hooks";
 import { getErrorMessage } from "@/lib/errors";
 import { routes } from "@/lib/routes";
 
@@ -29,6 +31,8 @@ type RegisterFormValues = z.infer<typeof registerSchema>;
 
 export function RegisterForm() {
   const registerTeacher = useRegister();
+  const auth = useCurrentUser();
+  const router = useRouter();
   const {
     register,
     handleSubmit,
@@ -43,6 +47,12 @@ export function RegisterForm() {
     }
   });
 
+  useEffect(() => {
+    if (auth.isAuthenticated) {
+      router.replace(routes.dashboard);
+    }
+  }, [auth.isAuthenticated, router]);
+
   return (
     <Card className="w-full max-w-md">
       <div className="mb-6">
@@ -51,9 +61,11 @@ export function RegisterForm() {
       </div>
       <form
         className="space-y-4"
-        onSubmit={handleSubmit(({ confirmPassword: _confirmPassword, ...values }) =>
-          registerTeacher.mutate(values)
-        )}
+        onSubmit={handleSubmit(({ confirmPassword: _confirmPassword, ...values }) => {
+          if (!registerTeacher.isPending) {
+            registerTeacher.mutate(values);
+          }
+        })}
       >
         <FormError message={registerTeacher.isError ? getErrorMessage(registerTeacher.error) : null} />
         <label className="block space-y-2">

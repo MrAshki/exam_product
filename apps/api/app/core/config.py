@@ -11,8 +11,12 @@ class Settings(BaseSettings):
     SECRET_KEY: str
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
     COOKIE_NAME: str = "exam_access_token"
+    COOKIE_SECURE: bool = False
+    COOKIE_SAMESITE: str = "lax"
+    COOKIE_PATH: str = "/"
+    COOKIE_DOMAIN: str | None = Field(default=None)
     FRONTEND_BASE_URL: str = "http://localhost:3000"
-    BACKEND_CORS_ORIGINS: str = "http://localhost:3000,http://127.0.0.1:3000"
+    BACKEND_CORS_ORIGINS: str = "http://localhost:3000"
 
     POSTGRES_HOST: str = "localhost"
     POSTGRES_PORT: int = 5432
@@ -73,6 +77,13 @@ class Settings(BaseSettings):
             for origin in self.BACKEND_CORS_ORIGINS.split(",")
             if origin.strip()
         ]
+
+    @property
+    def cookie_domain(self) -> str | None:
+        if self.COOKIE_DOMAIN is None:
+            return None
+        domain = self.COOKIE_DOMAIN.strip()
+        return domain or None
 
 
 @lru_cache

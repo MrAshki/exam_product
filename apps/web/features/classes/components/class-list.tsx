@@ -1,6 +1,7 @@
 "use client";
 
 import { Plus } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -13,9 +14,11 @@ import { ClassCard } from "@/features/classes/components/class-card";
 import { ClassForm } from "@/features/classes/components/class-form";
 import { useClasses, useCreateClass, useDeleteClass, useUpdateClass } from "@/features/classes/hooks";
 import { getErrorMessage } from "@/lib/errors";
+import { routes } from "@/lib/routes";
 import type { Classroom, ClassroomPayload } from "@/types/class";
 
 export function ClassList() {
+  const router = useRouter();
   const classes = useClasses();
   const createClass = useCreateClass();
   const deleteClass = useDeleteClass();
@@ -36,7 +39,10 @@ export function ClassList() {
 
   function handleCreate(payload: ClassroomPayload) {
     createClass.mutate(payload, {
-      onSuccess: closeCreate
+      onSuccess: (classroom) => {
+        closeCreate();
+        router.push(routes.classDetail(classroom.id));
+      }
     });
   }
 

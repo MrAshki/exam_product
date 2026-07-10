@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
+import { useProtectedQueryEnabled } from "@/features/auth/hooks";
 import { createStudent, listStudents, removeStudent, updateStudent } from "@/features/students/api";
 import type { StudentPayload } from "@/types/student";
 
@@ -10,10 +11,12 @@ export const studentQueryKeys = {
 };
 
 export function useStudents(classId: string, page: number, pageSize: number, search: string) {
+  const enabled = useProtectedQueryEnabled();
+
   return useQuery({
     queryKey: studentQueryKeys.list(classId, page, pageSize, search),
     queryFn: () => listStudents(classId, { page, page_size: pageSize, search: search || undefined }),
-    enabled: Boolean(classId)
+    enabled: enabled && Boolean(classId)
   });
 }
 

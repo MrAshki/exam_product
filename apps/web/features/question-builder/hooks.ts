@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
+import { useProtectedQueryEnabled } from "@/features/auth/hooks";
 import {
   confirmQuestion,
   createBlueprint,
@@ -32,27 +33,33 @@ function useInvalidateBuilder(classId: string, examId: string) {
 }
 
 export function useBuilderExam(classId: string, examId: string) {
+  const enabled = useProtectedQueryEnabled();
+
   return useQuery({
     queryKey: builderQueryKeys.exam(classId, examId),
     queryFn: () => getBuilderExam(classId, examId),
-    enabled: Boolean(classId && examId)
+    enabled: enabled && Boolean(classId && examId)
   });
 }
 
 export function useBlueprint(classId: string, examId: string) {
+  const enabled = useProtectedQueryEnabled();
+
   return useQuery({
     queryKey: builderQueryKeys.blueprint(classId, examId),
     queryFn: () => getBlueprint(classId, examId),
-    enabled: Boolean(classId && examId),
+    enabled: enabled && Boolean(classId && examId),
     retry: false
   });
 }
 
 export function useQuestions(classId: string, examId: string) {
+  const enabled = useProtectedQueryEnabled();
+
   return useQuery({
     queryKey: builderQueryKeys.questions(classId, examId),
     queryFn: () => listQuestions(classId, examId),
-    enabled: Boolean(classId && examId)
+    enabled: enabled && Boolean(classId && examId)
   });
 }
 
