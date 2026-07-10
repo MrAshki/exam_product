@@ -1,7 +1,8 @@
 "use client";
 
-import { LogOut, Menu, PanelLeftClose, PanelLeftOpen } from "lucide-react";
+import { BookOpen, ClipboardCheck, FileText, GraduationCap, Home, LogOut, Menu, MessageSquare, PanelLeftClose, PanelLeftOpen, Trophy } from "lucide-react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -18,15 +19,17 @@ type AppShellProps = {
 };
 
 const navItems = [
-  "کلاس‌ها",
-  "دانش‌آموزان",
-  "آزمون‌ها",
-  "بازبینی",
-  "نتایج",
-  "اعتراض‌ها"
+  { label: "داشبورد", href: routes.dashboard, icon: Home, disabled: false },
+  { label: "کلاس‌ها", href: routes.dashboard, icon: BookOpen, disabled: false },
+  { label: "دانش‌آموزان", icon: GraduationCap, disabled: true },
+  { label: "آزمون‌ها", icon: FileText, disabled: true },
+  { label: "بازبینی", icon: ClipboardCheck, disabled: true },
+  { label: "نتایج", icon: Trophy, disabled: true },
+  { label: "اعتراض‌ها", icon: MessageSquare, disabled: true }
 ];
 
 export function AppShell({ user, children }: AppShellProps) {
+  const pathname = usePathname();
   const sidebarCollapsed = useUiStore((state) => state.sidebarCollapsed);
   const toggleSidebar = useUiStore((state) => state.toggleSidebar);
   const logout = useLogout();
@@ -55,16 +58,31 @@ export function AppShell({ user, children }: AppShellProps) {
           </Button>
         </div>
         <nav className="mt-8 space-y-1">
-          {navItems.map((item) => (
-            <button
-              key={item}
-              type="button"
-              disabled
-              className="flex h-10 w-full items-center rounded-md px-3 text-right text-sm text-ink-500 disabled:cursor-not-allowed disabled:opacity-70"
-            >
-              <span className="truncate">{sidebarCollapsed ? item.slice(0, 1) : item}</span>
-            </button>
-          ))}
+          {navItems.map((item) => {
+            const Icon = item.icon;
+            const active = item.href ? pathname === item.href : false;
+            const className = cn(
+              "flex h-10 w-full items-center gap-3 rounded-md px-3 text-right text-sm transition",
+              active ? "bg-brand-50 text-brand-700" : "text-ink-600 hover:bg-slate-100",
+              item.disabled ? "cursor-not-allowed opacity-60 hover:bg-transparent" : ""
+            );
+
+            if (item.disabled || !item.href) {
+              return (
+                <button key={item.label} type="button" disabled className={className}>
+                  <Icon size={18} className="shrink-0" />
+                  {!sidebarCollapsed ? <span className="truncate">{item.label}</span> : null}
+                </button>
+              );
+            }
+
+            return (
+              <Link key={item.label} href={item.href} className={className}>
+                <Icon size={18} className="shrink-0" />
+                {!sidebarCollapsed ? <span className="truncate">{item.label}</span> : null}
+              </Link>
+            );
+          })}
         </nav>
       </aside>
       <div className={cn("transition-all", sidebarCollapsed ? "md:mr-20" : "md:mr-64")}>
