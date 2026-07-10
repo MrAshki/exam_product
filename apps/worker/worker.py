@@ -17,7 +17,6 @@ celery_app = Celery(
     broker=CELERY_BROKER_URL,
     backend=CELERY_RESULT_BACKEND,
     include=[
-        "apps.worker.tasks.test_tasks",
         "apps.worker.tasks.deterministic_grading_tasks",
         "apps.worker.tasks.ai_grading_tasks",
         "apps.worker.tasks.email_tasks",
@@ -29,7 +28,6 @@ celery_app.conf.update(
     task_default_queue=DEFAULT_QUEUE,
     task_queues=tuple(Queue(queue_name) for queue_name in ALL_QUEUES),
     task_routes={
-        "apps.worker.tasks.test_tasks.test_ping": {"queue": DEFAULT_QUEUE},
         "apps.worker.tasks.deterministic_grading_tasks.grade_submission": {
             "queue": DETERMINISTIC_GRADING_QUEUE
         },

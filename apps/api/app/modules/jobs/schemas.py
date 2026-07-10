@@ -1,18 +1,7 @@
 from datetime import datetime
-from typing import Any
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
-
-
-class TestPingRequest(BaseModel):
-    payload: dict[str, Any] | None = Field(default=None)
-
-
-class JobEnqueueRead(BaseModel):
-    job_id: UUID
-    status: str
-    celery_task_id: str | None = None
+from pydantic import BaseModel, ConfigDict
 
 
 class JobRead(BaseModel):
@@ -39,4 +28,3 @@ class JobRead(BaseModel):
     started_at: datetime | None
     finished_at: datetime | None
     created_at: datetime
-
