@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowRight, FileText, GraduationCap } from "lucide-react";
+import { ArrowRight, FileText, GraduationCap, MessageSquare } from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 
@@ -64,6 +64,12 @@ function ClassDetailContent() {
           <Button variant="secondary">
             <FileText size={16} />
             مدیریت آزمون‌ها
+          </Button>
+        </Link>
+        <Link href={routes.appeals(classId)}>
+          <Button variant="secondary">
+            <MessageSquare size={16} />
+            اعتراض‌ها
           </Button>
         </Link>
       </div>
