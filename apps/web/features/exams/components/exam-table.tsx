@@ -1,19 +1,22 @@
 "use client";
 
 import { Edit, Hammer, Send, Trash2 } from "lucide-react";
+import Link from "next/link";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { routes } from "@/lib/routes";
 import type { Exam } from "@/types/exam";
 
 type ExamTableProps = {
+  classId: string;
   exams: Exam[];
   onEdit: (exam: Exam) => void;
   onDelete: (exam: Exam) => void;
 };
 
-export function ExamTable({ exams, onEdit, onDelete }: ExamTableProps) {
+export function ExamTable({ classId, exams, onEdit, onDelete }: ExamTableProps) {
   return (
     <Table>
       <TableHead>
@@ -42,14 +45,20 @@ export function ExamTable({ exams, onEdit, onDelete }: ExamTableProps) {
             <TableCell>{exam.total_points}</TableCell>
             <TableCell>
               <div className="flex flex-wrap gap-2">
-                <span className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2 py-1 text-xs text-ink-500">
+                <Link
+                  href={routes.examBuilder(classId, exam.id)}
+                  className="inline-flex items-center gap-1 rounded-md bg-brand-50 px-2 py-1 text-xs font-medium text-brand-700 transition hover:bg-brand-100"
+                >
                   <Hammer size={13} />
                   سازنده
-                </span>
-                <span className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2 py-1 text-xs text-ink-500">
+                </Link>
+                <Link
+                  href={routes.examSchedule(classId, exam.id)}
+                  className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2 py-1 text-xs font-medium text-ink-700 transition hover:bg-slate-200"
+                >
                   <Send size={13} />
                   زمان‌بندی
-                </span>
+                </Link>
               </div>
             </TableCell>
             <TableCell>

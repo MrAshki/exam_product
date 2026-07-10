@@ -110,11 +110,11 @@ function ExamsContent() {
       ) : null}
 
       {exams.isSuccess && exams.data.length > 0 ? (
-        <ExamTable exams={exams.data} onEdit={setEditingExam} onDelete={setDeletingExam} />
+        <ExamTable classId={classId} exams={exams.data} onEdit={setEditingExam} onDelete={setDeletingExam} />
       ) : null}
 
       <div className="grid gap-4 md:grid-cols-3">
-        {["سازنده سوال", "زمان‌بندی و دعوت‌نامه", "بازبینی و انتشار"].map((item) => (
+        {["بازبینی و انتشار", "نتایج", "اعتراض‌ها"].map((item) => (
           <Card key={item} className="opacity-75">
             <h2 className="text-base font-semibold text-ink-900">{item}</h2>
             <p className="mt-2 text-sm leading-6 text-ink-500">این جریان در فازهای بعدی فرانت‌اند فعال می‌شود.</p>

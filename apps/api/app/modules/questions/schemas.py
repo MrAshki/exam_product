@@ -66,10 +66,13 @@ class QuestionSlotRead(BaseModel):
 
 
 class QuestionRead(QuestionSlotRead):
+    class_id: UUID
+    exam_id: UUID
     correct_answer: str | None
     correct_answer_data: Any | None
     expected_answer: str | None
     grading_instructions: str | None
     rubric: Any | None
+    rubric_ai_suggested: Any | None
     rubric_teacher_confirmed: bool
     options: list[QuestionOptionRead] = []

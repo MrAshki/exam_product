@@ -8,7 +8,7 @@ from app.db.session import get_db
 from app.modules.auth.models import User
 from app.modules.exams.permissions import get_current_teacher
 from app.modules.questions.models import Question
-from app.modules.questions.schemas import QuestionRead, QuestionSlotRead, QuestionUpdate
+from app.modules.questions.schemas import QuestionRead, QuestionUpdate
 from app.modules.questions.service import QuestionService
 
 
@@ -28,7 +28,7 @@ def list_question_slots(
 ) -> dict:
     questions = service.list_slots(class_id, exam_id, teacher)
     data = [
-        QuestionSlotRead.model_validate(question).model_dump(mode="json")
+        _serialize_question(question, service)
         for question in questions
     ]
     return success_response(data=data)
