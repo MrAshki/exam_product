@@ -1,6 +1,6 @@
 "use client";
 
-import { Edit, Hammer, Send, Trash2 } from "lucide-react";
+import { ClipboardCheck, Edit, Hammer, Send, Trash2 } from "lucide-react";
 import Link from "next/link";
 
 import { Badge } from "@/components/ui/badge";
@@ -58,6 +58,13 @@ export function ExamTable({ classId, exams, onEdit, onDelete }: ExamTableProps) 
                 >
                   <Send size={13} />
                   زمان‌بندی
+                </Link>
+                <Link
+                  href={routes.examReview(classId, exam.id)}
+                  className="inline-flex items-center gap-1 rounded-md bg-blue-50 px-2 py-1 text-xs font-medium text-blue-800 transition hover:bg-blue-100"
+                >
+                  <ClipboardCheck size={13} />
+                  بازبینی
                 </Link>
               </div>
             </TableCell>
