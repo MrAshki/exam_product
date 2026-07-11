@@ -1,7 +1,10 @@
+from decimal import Decimal
+
+
 def build_suggest_essay_rubric_prompt(
     question_text: str,
     expected_answer: str,
-    total_points: int,
+    total_points: Decimal,
 ) -> str:
     return f"""
 You are helping a teacher draft a grading rubric for an essay question.

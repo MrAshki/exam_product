@@ -139,6 +139,10 @@ def _add_true_false_blueprint_and_question(
     return question
 
 
+def _finalize_ready_exam(db, teacher: User, classroom: Classroom, exam: Exam) -> None:
+    ExamService(db).finalize(classroom.id, exam.id, teacher)
+
+
 def test_exam_tokens_table_exists_after_migration() -> None:
     _require_db()
     assert inspect(engine).has_table("exam_tokens")
@@ -151,6 +155,7 @@ def test_cannot_schedule_exam_without_active_class_student() -> None:
         classroom = _create_classroom(db, teacher)
         exam = _create_exam(db, teacher, classroom)
         _add_true_false_blueprint_and_question(db, teacher, classroom, exam)
+        _finalize_ready_exam(db, teacher, classroom, exam)
 
         with pytest.raises(AppException) as exc_info:
             ExamService(db).schedule(classroom.id, exam.id, _schedule_payload(), teacher)
@@ -166,13 +171,16 @@ def test_cannot_schedule_exam_with_incomplete_unconfirmed_questions() -> None:
         classroom = _create_classroom(db, teacher)
         _create_student(db, teacher, classroom)
         exam = _create_exam(db, teacher, classroom)
-        _add_true_false_blueprint_and_question(db, teacher, classroom, exam, confirmed=False)
+        question = _add_true_false_blueprint_and_question(db, teacher, classroom, exam, confirmed=False)
+        question.text = None
+        db.add(question)
+        db.commit()
 
         with pytest.raises(AppException) as exc_info:
-            ExamService(db).schedule(classroom.id, exam.id, _schedule_payload(), teacher)
+            ExamService(db).finalize(classroom.id, exam.id, teacher)
 
     assert exc_info.value.code == ExamErrorCode.EXAM_NOT_READY
-    assert "question_1" in exc_info.value.details
+    assert exc_info.value.details["readiness"]["failures"]
 
 
 def test_cannot_schedule_exam_if_question_points_do_not_match_exam_total() -> None:
@@ -185,10 +193,10 @@ def test_cannot_schedule_exam_if_question_points_do_not_match_exam_total() -> No
         _add_true_false_blueprint_and_question(db, teacher, classroom, exam, points=10)
 
         with pytest.raises(AppException) as exc_info:
-            ExamService(db).schedule(classroom.id, exam.id, _schedule_payload(), teacher)
+            ExamService(db).finalize(classroom.id, exam.id, teacher)
 
     assert exc_info.value.code == ExamErrorCode.EXAM_NOT_READY
-    assert "total_points" in exc_info.value.details
+    assert exc_info.value.details["readiness"]["points_match"] is False
 
 
 def test_can_schedule_ready_exam_and_create_tokens_idempotently() -> None:
@@ -200,6 +208,7 @@ def test_can_schedule_ready_exam_and_create_tokens_idempotently() -> None:
         _create_student(db, teacher, classroom)
         exam = _create_exam(db, teacher, classroom)
         _add_true_false_blueprint_and_question(db, teacher, classroom, exam)
+        _finalize_ready_exam(db, teacher, classroom, exam)
         db.add(
             ExamToken(
                 teacher_id=teacher.id,
@@ -270,6 +279,7 @@ def test_send_invitations_queues_email_jobs_with_exam_links(monkeypatch) -> None
         _create_student(db, teacher, classroom)
         exam = _create_exam(db, teacher, classroom)
         _add_true_false_blueprint_and_question(db, teacher, classroom, exam)
+        _finalize_ready_exam(db, teacher, classroom, exam)
         ExamService(db).schedule(classroom.id, exam.id, _schedule_payload(), teacher)
 
         result = ExamService(db).send_invitations(

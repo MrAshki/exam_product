@@ -19,4 +19,5 @@ export type QuestionFieldProps = {
   register: UseFormRegister<QuestionFormValues>;
   errors: FieldErrors<QuestionFormValues>;
   setValue: UseFormSetValue<QuestionFormValues>;
+  disabled?: boolean;
 };

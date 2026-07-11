@@ -5,7 +5,7 @@ import type { QuestionFieldProps } from "@/features/question-builder/form-types"
 
 const OPTION_KEYS = ["A", "B", "C", "D"] as const;
 
-export function MultipleChoiceFields({ control, register, setValue }: QuestionFieldProps) {
+export function MultipleChoiceFields({ control, register, setValue, disabled }: QuestionFieldProps) {
   const selectedAnswer = useWatch({ control, name: "correct_answer" });
 
   return (
@@ -18,14 +18,15 @@ export function MultipleChoiceFields({ control, register, setValue }: QuestionFi
         return (
           <label key={key} className="grid gap-2 sm:grid-cols-[auto_1fr_auto] sm:items-center">
             <span className="text-sm font-semibold text-ink-700">{key}</span>
-            <Input {...register(`option_${fieldKey}`)} placeholder={`گزینه ${key}`} />
+            <Input {...register(`option_${fieldKey}`)} placeholder={`گزینه ${key}`} disabled={disabled} />
             <button
               type="button"
               aria-pressed={isSelected}
+              disabled={disabled}
               className={
                 isSelected
                   ? "rounded-md border border-brand-600 bg-brand-50 px-3 py-2 text-sm font-semibold text-brand-700"
-                  : "rounded-md border border-slate-200 px-3 py-2 text-sm text-ink-700 hover:bg-slate-50"
+                  : "rounded-md border border-slate-200 px-3 py-2 text-sm text-ink-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
               }
               onClick={() => setValue("correct_answer", key, { shouldDirty: true })}
             >

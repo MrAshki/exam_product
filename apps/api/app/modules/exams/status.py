@@ -3,6 +3,7 @@ from enum import StrEnum
 
 class ExamStatus(StrEnum):
     DRAFT = "draft"
+    FINALIZED = "finalized"
     SCHEDULED = "scheduled"
     REVIEW_REQUIRED = "review_required"
     APPROVED = "approved"

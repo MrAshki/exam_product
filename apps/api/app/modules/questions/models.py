@@ -1,6 +1,7 @@
 import uuid
+from decimal import Decimal
 
-from sqlalchemy import Boolean, Float, ForeignKey, Index, Integer, JSON, String, Text, func, text as sa_text
+from sqlalchemy import Boolean, Float, ForeignKey, Index, Integer, JSON, Numeric, String, Text, func, text as sa_text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, declared_attr, mapped_column, relationship
 
@@ -66,7 +67,12 @@ class Question(BaseModelMixin, Base):
     correct_answer: Mapped[str | None] = mapped_column(Text, nullable=True)
     correct_answer_data: Mapped[dict | list | None] = mapped_column(JSON, nullable=True)
     expected_answer: Mapped[str | None] = mapped_column(Text, nullable=True)
-    points: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default=sa_text("0"))
+    points: Mapped[Decimal] = mapped_column(
+        Numeric(8, 2),
+        nullable=False,
+        default=Decimal("0"),
+        server_default=sa_text("0"),
+    )
     grading_instructions: Mapped[str | None] = mapped_column(Text, nullable=True)
     rubric: Mapped[dict | list | None] = mapped_column(JSON, nullable=True)
     rubric_ai_suggested: Mapped[dict | list | None] = mapped_column(JSON, nullable=True)

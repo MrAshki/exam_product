@@ -26,7 +26,7 @@ class AIService:
         self,
         question_text: str,
         expected_answer: str,
-        total_points: int,
+        total_points: Decimal,
         context: AICallContext,
     ) -> dict[str, Any]:
         task_name = "suggest_essay_rubric"

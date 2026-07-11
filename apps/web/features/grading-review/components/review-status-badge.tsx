@@ -9,6 +9,7 @@ type ReviewStatusBadgeProps = {
 
 const labels: Record<string, string> = {
   draft: "پیش‌نویس",
+  finalized: "نهایی‌شده",
   scheduled: "زمان‌بندی‌شده",
   review_required: "نیازمند بازبینی",
   submitted: "ارسال‌شده",

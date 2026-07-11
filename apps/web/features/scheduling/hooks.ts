@@ -12,6 +12,7 @@ export function useScheduleExam(classId: string, examId: string) {
     mutationFn: (payload: SchedulePayload) => scheduleExam(classId, examId, payload),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: builderQueryKeys.exam(classId, examId) });
+      void queryClient.invalidateQueries({ queryKey: builderQueryKeys.readiness(classId, examId) });
       void queryClient.invalidateQueries({ queryKey: examQueryKeys.list(classId) });
     }
   });

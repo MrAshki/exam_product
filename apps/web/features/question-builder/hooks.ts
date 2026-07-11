@@ -4,9 +4,12 @@ import { useProtectedQueryEnabled } from "@/features/auth/hooks";
 import {
   confirmQuestion,
   createBlueprint,
+  finalizeExam,
   getBlueprint,
   getBuilderExam,
+  getExamReadiness,
   listQuestions,
+  reopenExam,
   suggestRubric,
   updateBlueprint,
   updateQuestion
@@ -18,7 +21,8 @@ import type { QuestionUpdatePayload } from "@/types/question";
 export const builderQueryKeys = {
   exam: (classId: string, examId: string) => ["exam", classId, examId] as const,
   blueprint: (classId: string, examId: string) => ["blueprint", classId, examId] as const,
-  questions: (classId: string, examId: string) => ["questions", classId, examId] as const
+  questions: (classId: string, examId: string) => ["questions", classId, examId] as const,
+  readiness: (classId: string, examId: string) => ["exam-readiness", classId, examId] as const
 };
 
 function useInvalidateBuilder(classId: string, examId: string) {
@@ -28,6 +32,7 @@ function useInvalidateBuilder(classId: string, examId: string) {
     void queryClient.invalidateQueries({ queryKey: builderQueryKeys.exam(classId, examId) });
     void queryClient.invalidateQueries({ queryKey: builderQueryKeys.blueprint(classId, examId) });
     void queryClient.invalidateQueries({ queryKey: builderQueryKeys.questions(classId, examId) });
+    void queryClient.invalidateQueries({ queryKey: builderQueryKeys.readiness(classId, examId) });
     void queryClient.invalidateQueries({ queryKey: examQueryKeys.list(classId) });
   };
 }
@@ -63,6 +68,17 @@ export function useQuestions(classId: string, examId: string) {
   });
 }
 
+export function useExamReadiness(classId: string, examId: string) {
+  const enabled = useProtectedQueryEnabled();
+
+  return useQuery({
+    queryKey: builderQueryKeys.readiness(classId, examId),
+    queryFn: () => getExamReadiness(classId, examId),
+    enabled: enabled && Boolean(classId && examId),
+    retry: false
+  });
+}
+
 export function useCreateBlueprint(classId: string, examId: string) {
   const invalidate = useInvalidateBuilder(classId, examId);
 
@@ -95,6 +111,24 @@ export function useConfirmQuestion(classId: string, examId: string, questionId: 
 
   return useMutation({
     mutationFn: () => confirmQuestion(classId, examId, questionId),
+    onSuccess: invalidate
+  });
+}
+
+export function useFinalizeExam(classId: string, examId: string) {
+  const invalidate = useInvalidateBuilder(classId, examId);
+
+  return useMutation({
+    mutationFn: () => finalizeExam(classId, examId),
+    onSuccess: invalidate
+  });
+}
+
+export function useReopenExam(classId: string, examId: string) {
+  const invalidate = useInvalidateBuilder(classId, examId);
+
+  return useMutation({
+    mutationFn: () => reopenExam(classId, examId),
     onSuccess: invalidate
   });
 }

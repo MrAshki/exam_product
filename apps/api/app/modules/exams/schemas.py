@@ -1,4 +1,5 @@
 from datetime import datetime
+from decimal import Decimal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -10,7 +11,7 @@ class ExamCreate(BaseModel):
     start_time: datetime | None = None
     end_time: datetime | None = None
     duration_minutes: int | None = Field(default=None, ge=1)
-    total_points: int = Field(default=0, ge=0)
+    total_points: Decimal = Field(default=Decimal("0"), ge=0, max_digits=8, decimal_places=2)
     show_leaderboard: bool = True
     allow_appeals: bool = True
     show_correct_answers: bool = True
@@ -39,7 +40,7 @@ class ExamUpdate(BaseModel):
     start_time: datetime | None = None
     end_time: datetime | None = None
     duration_minutes: int | None = Field(default=None, ge=1)
-    total_points: int | None = Field(default=None, ge=0)
+    total_points: Decimal | None = Field(default=None, ge=0, max_digits=8, decimal_places=2)
     show_leaderboard: bool | None = None
     allow_appeals: bool | None = None
     show_correct_answers: bool | None = None
@@ -74,7 +75,7 @@ class ExamRead(BaseModel):
     end_time: datetime | None
     duration_minutes: int | None
     status: str
-    total_points: int
+    total_points: Decimal
     show_leaderboard: bool
     allow_appeals: bool
     show_correct_answers: bool
@@ -106,6 +107,60 @@ class ExamScheduleRead(BaseModel):
     end_time: datetime
     duration_minutes: int
     created_exam_tokens: int
+
+
+class ExamReadinessFailure(BaseModel):
+    question_id: UUID | None = None
+    order_index: int | None = None
+    question_type: str | None = None
+    code: str
+    field: str | None = None
+    message: str
+
+
+class ExamReadinessRead(BaseModel):
+    exam_id: UUID
+    exam_status: str
+    is_ready: bool
+    finalization_allowed: bool
+    scheduling_allowed: bool
+    total_question_count: int
+    complete_question_count: int
+    incomplete_question_count: int
+    calculated_question_points: Decimal
+    exam_total_points: Decimal
+    points_match: bool
+    blueprint_match: bool
+    failures: list[ExamReadinessFailure]
+    reopen_allowed: bool = False
+    reopen_mode: str = "blocked"
+    reopen_block_code: str | None = None
+    reopen_block_message: str | None = None
+    invalidates_tokens: bool = False
+    has_submissions: bool = False
+    is_in_progress: bool = False
+
+
+class ExamFinalizeRead(BaseModel):
+    exam_id: UUID
+    status: str
+    total_question_count: int
+    complete_question_count: int
+    calculated_question_points: Decimal
+    exam_total_points: Decimal
+    scheduling_allowed: bool
+    pdf_download_allowed: bool = False
+
+
+class ExamReopenRead(BaseModel):
+    exam_id: UUID
+    previous_status: str
+    status: str
+    invalidated_token_count: int
+    start_time: datetime | None = None
+    end_time: datetime | None = None
+    questions_reset: int
+    message: str
 
 
 class ExamInvitationRequest(BaseModel):

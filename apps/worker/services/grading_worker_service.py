@@ -152,7 +152,7 @@ class DeterministicGradingWorkerService:
             db.add(answer)
             objective_count += 1
 
-        submission.max_score = sum(Decimal(question.points) for question in questions)
+        submission.max_score = sum((Decimal(question.points) for question in questions), Decimal("0"))
         final_scores = [answer.final_score for answer in answers if answer.final_score is not None]
         submission.total_score = sum(final_scores, Decimal("0"))
         submission.needs_review_count = sum(1 for answer in answers if answer.needs_review)
@@ -490,7 +490,7 @@ class AIGradingWorkerService:
             "question_text": question.text or "",
             "expected_answer": question.expected_answer or question.correct_answer or "",
             "student_answer": AIGradingWorkerService._student_answer_text(answer),
-            "max_score": int(question.points),
+            "max_score": str(Decimal(question.points)),
         }
         if question.type == QuestionType.ESSAY.value:
             payload["rubric"] = question.rubric

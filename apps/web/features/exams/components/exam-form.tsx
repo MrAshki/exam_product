@@ -10,6 +10,7 @@ import { FormError } from "@/components/common/form-error";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { decimalToInput } from "@/lib/decimal";
 import { getErrorMessage } from "@/lib/errors";
 import type { Exam, ExamPayload } from "@/types/exam";
 
@@ -17,7 +18,12 @@ const examSchema = z.object({
   title: z.string().trim().min(1, "عنوان آزمون را وارد کنید."),
   description: z.string().optional(),
   duration_minutes: z.coerce.number().int().positive("مدت آزمون باید مثبت باشد.").optional().or(z.literal("")),
-  total_points: z.coerce.number().int().min(0, "نمره کل نمی‌تواند منفی باشد.").optional().or(z.literal(""))
+  total_points: z.coerce
+    .number()
+    .min(0, "نمره کل نمی‌تواند منفی باشد.")
+    .refine((value) => Number.isInteger(value * 100), "نمره کل حداکثر دو رقم اعشار دارد.")
+    .optional()
+    .or(z.literal(""))
 });
 
 type ExamFormInput = z.input<typeof examSchema>;
@@ -47,7 +53,7 @@ export function ExamForm({ initialExam, submitLabel, pending, error, onSubmit }:
       title: initialExam?.title ?? "",
       description: initialExam?.description ?? "",
       duration_minutes: initialExam?.duration_minutes ?? "",
-      total_points: initialExam?.total_points ?? 0
+      total_points: decimalToInput(initialExam?.total_points) || 0
     }
   });
 
@@ -56,7 +62,7 @@ export function ExamForm({ initialExam, submitLabel, pending, error, onSubmit }:
       title: initialExam?.title ?? "",
       description: initialExam?.description ?? "",
       duration_minutes: initialExam?.duration_minutes ?? "",
-      total_points: initialExam?.total_points ?? 0
+      total_points: decimalToInput(initialExam?.total_points) || 0
     });
   }, [form, initialExam]);
 
@@ -98,7 +104,7 @@ export function ExamForm({ initialExam, submitLabel, pending, error, onSubmit }:
         </label>
         <label className="block space-y-1.5">
           <span className="text-sm font-medium text-ink-700">نمره کل</span>
-          <Input type="number" min={0} {...form.register("total_points")} />
+          <Input type="number" min={0} step="0.01" inputMode="decimal" {...form.register("total_points")} />
           {form.formState.errors.total_points ? (
             <span className="text-xs text-rose-700">{form.formState.errors.total_points.message}</span>
           ) : null}

@@ -52,6 +52,7 @@ function toIso(value: string) {
 }
 
 export function ScheduleForm({ exam, pending, error, resultMessage, onSubmit }: ScheduleFormProps) {
+  const schedulingLocked = exam?.status !== "finalized";
   const form = useForm<ScheduleFormInput, unknown, ScheduleFormValues>({
     resolver: zodResolver(scheduleSchema),
     defaultValues: {
@@ -82,34 +83,35 @@ export function ScheduleForm({ exam, pending, error, resultMessage, onSubmit }: 
     >
       <FormError message={error ? getErrorMessage(error) : null} />
       {resultMessage ? <Alert variant="success">{resultMessage}</Alert> : null}
+      {schedulingLocked ? <Alert>زمان‌بندی فقط پس از تأیید نهایی آزمون فعال می‌شود.</Alert> : null}
       <div className="grid gap-4 md:grid-cols-3">
         <label className="space-y-1.5">
           <span className="text-sm font-medium text-ink-700">زمان شروع</span>
-          <Input type="datetime-local" {...form.register("start_time")} />
+          <Input type="datetime-local" {...form.register("start_time")} disabled={schedulingLocked} />
           {form.formState.errors.start_time ? (
             <span className="text-xs text-rose-700">{form.formState.errors.start_time.message}</span>
           ) : null}
         </label>
         <label className="space-y-1.5">
           <span className="text-sm font-medium text-ink-700">زمان پایان</span>
-          <Input type="datetime-local" {...form.register("end_time")} />
+          <Input type="datetime-local" {...form.register("end_time")} disabled={schedulingLocked} />
           {form.formState.errors.end_time ? (
             <span className="text-xs text-rose-700">{form.formState.errors.end_time.message}</span>
           ) : null}
         </label>
         <label className="space-y-1.5">
           <span className="text-sm font-medium text-ink-700">مدت آزمون</span>
-          <Input type="number" min={1} {...form.register("duration_minutes")} />
+          <Input type="number" min={1} {...form.register("duration_minutes")} disabled={schedulingLocked} />
           {form.formState.errors.duration_minutes ? (
             <span className="text-xs text-rose-700">{form.formState.errors.duration_minutes.message}</span>
           ) : null}
         </label>
       </div>
       <Alert>
-        آمادگی آزمون را backend هنگام ثبت زمان‌بندی بررسی می‌کند. اگر سوالی تایید نشده باشد یا جمع نمره‌ها برابر نمره آزمون نباشد، خطای دقیق همین‌جا نمایش داده می‌شود.
+        backend هنگام ثبت زمان‌بندی یک بار دیگر آمادگی آزمون نهایی‌شده را بررسی می‌کند.
       </Alert>
       <div className="flex justify-end">
-        <Button type="submit" disabled={pending || exam?.status !== "draft"}>
+        <Button type="submit" disabled={pending || schedulingLocked}>
           <CalendarClock size={16} />
           {pending ? "در حال زمان‌بندی" : "زمان‌بندی آزمون"}
         </Button>

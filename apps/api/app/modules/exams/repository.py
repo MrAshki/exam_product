@@ -7,6 +7,7 @@ from app.modules.classrooms.models import Classroom
 from app.modules.exams.models import Exam, ExamBlueprint, ExamToken
 from app.modules.questions.models import Question, QuestionOption
 from app.modules.students.models import ClassStudent, Student
+from app.modules.submissions.models import Submission
 
 
 class ExamRepository:
@@ -89,6 +90,24 @@ class ExamRepository:
         )
         return self.db.scalar(statement)
 
+    def get_by_id_for_teacher_class_for_update(
+        self,
+        exam_id: UUID,
+        class_id: UUID,
+        teacher_id: UUID,
+    ) -> Exam | None:
+        statement = (
+            select(Exam)
+            .where(
+                Exam.id == exam_id,
+                Exam.class_id == class_id,
+                Exam.teacher_id == teacher_id,
+                Exam.deleted_at.is_(None),
+            )
+            .with_for_update()
+        )
+        return self.db.scalar(statement)
+
     def get_by_title_for_class(
         self,
         title: str,
@@ -120,6 +139,26 @@ class ExamRepository:
 
     def save_exam_with_tokens(self, exam: Exam, tokens: list[ExamToken]) -> Exam:
         self.db.add(exam)
+        self.db.add_all(tokens)
+        self.db.commit()
+        self.db.refresh(exam)
+        return exam
+
+    def save_exam_with_questions(self, exam: Exam, questions: list[Question]) -> Exam:
+        self.db.add(exam)
+        self.db.add_all(questions)
+        self.db.commit()
+        self.db.refresh(exam)
+        return exam
+
+    def save_reopened_exam(
+        self,
+        exam: Exam,
+        questions: list[Question],
+        tokens: list[ExamToken],
+    ) -> Exam:
+        self.db.add(exam)
+        self.db.add_all(questions)
         self.db.add_all(tokens)
         self.db.commit()
         self.db.refresh(exam)
@@ -197,6 +236,60 @@ class ExamRepository:
             ExamToken.deleted_at.is_(None),
         )
         return list(self.db.scalars(statement).all())
+
+    def has_active_tokens_for_exam(
+        self,
+        exam_id: UUID,
+        class_id: UUID,
+        teacher_id: UUID,
+    ) -> bool:
+        statement = (
+            select(ExamToken.id)
+            .where(
+                ExamToken.exam_id == exam_id,
+                ExamToken.class_id == class_id,
+                ExamToken.teacher_id == teacher_id,
+                ExamToken.deleted_at.is_(None),
+            )
+            .limit(1)
+        )
+        return self.db.scalar(statement) is not None
+
+    def has_active_submissions_for_exam(
+        self,
+        exam_id: UUID,
+        class_id: UUID,
+        teacher_id: UUID,
+    ) -> bool:
+        statement = (
+            select(Submission.id)
+            .where(
+                Submission.exam_id == exam_id,
+                Submission.class_id == class_id,
+                Submission.teacher_id == teacher_id,
+                Submission.deleted_at.is_(None),
+            )
+            .limit(1)
+        )
+        return self.db.scalar(statement) is not None
+
+    def count_active_submissions_for_exam(
+        self,
+        exam_id: UUID,
+        class_id: UUID,
+        teacher_id: UUID,
+    ) -> int:
+        statement = (
+            select(func.count())
+            .select_from(Submission)
+            .where(
+                Submission.exam_id == exam_id,
+                Submission.class_id == class_id,
+                Submission.teacher_id == teacher_id,
+                Submission.deleted_at.is_(None),
+            )
+        )
+        return int(self.db.scalar(statement) or 0)
 
     def token_exists(self, token: str) -> bool:
         statement = select(ExamToken.id).where(ExamToken.token == token).limit(1)
@@ -290,5 +383,5 @@ class ExamRepository:
             Question.class_id == class_id,
             Question.teacher_id == teacher_id,
             Question.deleted_at.is_(None),
-        )
+        ).order_by(Question.order_index.asc())
         return list(self.db.scalars(statement).all())

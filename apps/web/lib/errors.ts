@@ -11,6 +11,15 @@ const apiErrorMessages: Record<string, string> = {
   STUDENT_NOT_IN_CLASS: "این دانش‌آموز در کلاس انتخاب‌شده نیست.",
   STUDENT_ALREADY_IN_CLASS: "این دانش‌آموز از قبل در این کلاس وجود دارد.",
   STUDENT_EMAIL_ALREADY_EXISTS: "دانش‌آموز دیگری با این ایمیل برای شما ثبت شده است.",
+  EXAM_NOT_READY: "آزمون هنوز آماده نیست.",
+  EXAM_NOT_DRAFT: "آزمون باید در وضعیت پیش‌نویس باشد.",
+  EXAM_NOT_FINALIZED: "آزمون باید قبل از زمان‌بندی نهایی شود.",
+  EXAM_CANNOT_BE_REOPENED: "این آزمون قابل بازگشایی نیست.",
+  EXAM_ALREADY_DRAFT: "آزمون در حال حاضر پیش‌نویس است.",
+  EXAM_IN_PROGRESS: "آزمون در حال برگزاری است و تا پایان بازه آزمون قابل ویرایش نیست.",
+  EXAM_SCHEDULE_INVALID: "زمان‌بندی آزمون نامعتبر است و بازگشایی امن نیست.",
+  EXAM_HAS_TOKENS: "برای این آزمون توکن فعال ساخته شده و دیگر قابل بازگشایی نیست.",
+  EXAM_HAS_SUBMISSIONS: "برای این آزمون پاسخ ثبت شده و دیگر قابل بازگشایی نیست.",
   VALIDATION_ERROR: "اطلاعات واردشده معتبر نیست. فیلدها را بررسی کنید."
 };
 

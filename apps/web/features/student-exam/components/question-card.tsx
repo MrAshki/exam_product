@@ -5,6 +5,7 @@ import { Card } from "@/components/ui/card";
 import { MultipleChoiceAnswer } from "@/features/student-exam/components/multiple-choice-answer";
 import { TextAnswer } from "@/features/student-exam/components/text-answer";
 import { TrueFalseAnswer } from "@/features/student-exam/components/true-false-answer";
+import { formatDecimal } from "@/lib/decimal";
 import type { StudentExamQuestion } from "@/types/student-exam";
 
 type QuestionCardProps = {
@@ -56,7 +57,7 @@ export function QuestionCard({ question, value, disabled, onChange }: QuestionCa
           <div className="flex flex-wrap items-center gap-2">
             <Badge>سوال {question.order_index}</Badge>
             <Badge>{typeLabels[question.type] ?? question.type}</Badge>
-            <span className="text-xs text-ink-500">{question.points} نمره</span>
+            <span className="text-xs text-ink-500">{formatDecimal(question.points)} نمره</span>
           </div>
           <p className="whitespace-pre-wrap text-sm leading-7 text-ink-900">{question.text}</p>
         </div>

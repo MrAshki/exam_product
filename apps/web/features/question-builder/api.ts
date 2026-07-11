@@ -1,7 +1,7 @@
 import { getExam } from "@/features/exams/api";
 import { apiClient } from "@/lib/api-client";
 import type { Blueprint, BlueprintPayload } from "@/types/blueprint";
-import type { Exam } from "@/types/exam";
+import type { Exam, ExamFinalizeResult, ExamReadiness, ExamReopenResult } from "@/types/exam";
 import type { Question, QuestionUpdatePayload, RubricSuggestion } from "@/types/question";
 
 export { getExam };
@@ -32,6 +32,18 @@ export function updateQuestion(classId: string, examId: string, questionId: stri
 
 export function confirmQuestion(classId: string, examId: string, questionId: string) {
   return apiClient.post<Question>(`/classes/${classId}/exams/${examId}/questions/${questionId}/confirm`);
+}
+
+export function getExamReadiness(classId: string, examId: string) {
+  return apiClient.get<ExamReadiness>(`/classes/${classId}/exams/${examId}/readiness`);
+}
+
+export function finalizeExam(classId: string, examId: string) {
+  return apiClient.post<ExamFinalizeResult>(`/classes/${classId}/exams/${examId}/finalize`);
+}
+
+export function reopenExam(classId: string, examId: string) {
+  return apiClient.post<ExamReopenResult>(`/classes/${classId}/exams/${examId}/reopen`);
 }
 
 export function suggestRubric(classId: string, examId: string, questionId: string) {

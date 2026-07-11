@@ -9,6 +9,13 @@ class ExamErrorCode:
     EXAM_NOT_IN_CLASS = "EXAM_NOT_IN_CLASS"
     EXAM_ALREADY_HAS_BLUEPRINT = "EXAM_ALREADY_HAS_BLUEPRINT"
     EXAM_NOT_DRAFT = "EXAM_NOT_DRAFT"
+    EXAM_NOT_FINALIZED = "EXAM_NOT_FINALIZED"
+    EXAM_CANNOT_BE_REOPENED = "EXAM_CANNOT_BE_REOPENED"
+    EXAM_ALREADY_DRAFT = "EXAM_ALREADY_DRAFT"
+    EXAM_IN_PROGRESS = "EXAM_IN_PROGRESS"
+    EXAM_SCHEDULE_INVALID = "EXAM_SCHEDULE_INVALID"
+    EXAM_HAS_TOKENS = "EXAM_HAS_TOKENS"
+    EXAM_HAS_SUBMISSIONS = "EXAM_HAS_SUBMISSIONS"
     EXAM_REQUIRES_STUDENTS = "EXAM_REQUIRES_STUDENTS"
     EXAM_TITLE_ALREADY_EXISTS = "EXAM_TITLE_ALREADY_EXISTS"
     BLUEPRINT_NOT_FOUND = "BLUEPRINT_NOT_FOUND"
@@ -59,6 +66,69 @@ def exam_not_draft() -> AppException:
         code=ExamErrorCode.EXAM_NOT_DRAFT,
         message="Exam must be in draft status.",
         status_code=status.HTTP_409_CONFLICT,
+    )
+
+
+def exam_not_finalized(details: dict | None = None) -> AppException:
+    return AppException(
+        code=ExamErrorCode.EXAM_NOT_FINALIZED,
+        message="Exam must be finalized before scheduling.",
+        status_code=status.HTTP_409_CONFLICT,
+        details=details,
+    )
+
+
+def exam_cannot_be_reopened(details: dict | None = None) -> AppException:
+    return AppException(
+        code=ExamErrorCode.EXAM_CANNOT_BE_REOPENED,
+        message="Exam cannot be reopened.",
+        status_code=status.HTTP_409_CONFLICT,
+        details=details,
+    )
+
+
+def exam_already_draft(details: dict | None = None) -> AppException:
+    return AppException(
+        code=ExamErrorCode.EXAM_ALREADY_DRAFT,
+        message="Exam is already in draft status.",
+        status_code=status.HTTP_409_CONFLICT,
+        details=details,
+    )
+
+
+def exam_in_progress(details: dict | None = None) -> AppException:
+    return AppException(
+        code=ExamErrorCode.EXAM_IN_PROGRESS,
+        message="Exam is currently in progress.",
+        status_code=status.HTTP_409_CONFLICT,
+        details=details,
+    )
+
+
+def exam_schedule_invalid(details: dict | None = None) -> AppException:
+    return AppException(
+        code=ExamErrorCode.EXAM_SCHEDULE_INVALID,
+        message="Exam schedule is invalid.",
+        status_code=status.HTTP_409_CONFLICT,
+        details=details,
+    )
+
+
+def exam_has_tokens(details: dict | None = None) -> AppException:
+    return AppException(
+        code=ExamErrorCode.EXAM_HAS_TOKENS,
+        message="Exam already has active access tokens.",
+        status_code=status.HTTP_409_CONFLICT,
+        details=details,
+    )
+
+
+def exam_has_submissions(details: dict | None = None) -> AppException:
+    return AppException(
+        code=ExamErrorCode.EXAM_HAS_SUBMISSIONS,
+        message="Exam already has active submissions.",
+        status_code=status.HTTP_409_CONFLICT,
+        details=details,
     )
 
 

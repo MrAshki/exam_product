@@ -1,25 +1,36 @@
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
-import type { Exam } from "@/types/exam";
+import { decimalToNumber, formatDecimal, sumDecimalValues } from "@/lib/decimal";
+import type { Exam, ExamReadiness } from "@/types/exam";
 import type { QuestionSlot } from "@/types/question";
 
 type QuestionProgressProps = {
   exam?: Exam;
   questions: QuestionSlot[];
+  readiness?: ExamReadiness;
 };
 
-export function QuestionProgress({ exam, questions }: QuestionProgressProps) {
+const statusLabels: Record<string, string> = {
+  draft: "پیش‌نویس",
+  finalized: "نهایی‌شده",
+  scheduled: "زمان‌بندی‌شده",
+  review_required: "آماده بازبینی",
+  approved: "تایید شده",
+  published: "منتشر شده"
+};
+
+export function QuestionProgress({ exam, questions, readiness }: QuestionProgressProps) {
   const total = questions.length;
-  const confirmed = questions.filter((question) => question.teacher_confirmed || question.status === "confirmed").length;
-  const percent = total ? Math.round((confirmed / total) * 100) : 0;
-  const points = questions.reduce((sum, question) => sum + question.points, 0);
+  const complete = readiness?.complete_question_count ?? questions.filter((question) => question.text && decimalToNumber(question.points) > 0).length;
+  const percent = total ? Math.round((complete / total) * 100) : 0;
+  const points = sumDecimalValues(questions.map((question) => question.points));
 
   return (
     <Card className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="text-lg font-semibold text-ink-900">{exam?.title || "آزمون"}</h2>
-          <p className="mt-1 text-sm text-ink-500">وضعیت: {exam?.status || "—"}</p>
+          <p className="mt-1 text-sm text-ink-500">وضعیت: {exam ? statusLabels[exam.status] ?? exam.status : "—"}</p>
         </div>
         <Badge>{percent}% تکمیل</Badge>
       </div>
@@ -32,12 +43,12 @@ export function QuestionProgress({ exam, questions }: QuestionProgressProps) {
           <p className="mt-1 text-xl font-semibold text-ink-900">{total}</p>
         </div>
         <div className="rounded-md bg-slate-50 p-3">
-          <p className="text-ink-500">تایید شده</p>
-          <p className="mt-1 text-xl font-semibold text-ink-900">{confirmed}</p>
+          <p className="text-ink-500">کامل</p>
+          <p className="mt-1 text-xl font-semibold text-ink-900">{complete}</p>
         </div>
         <div className="rounded-md bg-slate-50 p-3">
           <p className="text-ink-500">نمره سوال‌ها / آزمون</p>
-          <p className="mt-1 text-xl font-semibold text-ink-900">{points} / {exam?.total_points ?? "—"}</p>
+          <p className="mt-1 text-xl font-semibold text-ink-900">{points} / {exam ? formatDecimal(exam.total_points) : "—"}</p>
         </div>
       </div>
     </Card>

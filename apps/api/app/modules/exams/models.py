@@ -1,7 +1,8 @@
 import uuid
 from datetime import datetime
+from decimal import Decimal
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, String, Text, func, text
+from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, Numeric, String, Text, func, text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, declared_attr, mapped_column, relationship
 
@@ -48,7 +49,12 @@ class Exam(BaseModelMixin, Base):
         server_default=text("'draft'"),
         index=True,
     )
-    total_points: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default=text("0"))
+    total_points: Mapped[Decimal] = mapped_column(
+        Numeric(8, 2),
+        nullable=False,
+        default=Decimal("0"),
+        server_default=text("0"),
+    )
     show_leaderboard: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default=text("true"))
     allow_appeals: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default=text("true"))
     show_correct_answers: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default=text("true"))

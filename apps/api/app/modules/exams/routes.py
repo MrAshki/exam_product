@@ -12,9 +12,12 @@ from app.modules.exams.schemas import (
     BlueprintRead,
     BlueprintUpdate,
     ExamCreate,
+    ExamFinalizeRead,
     ExamInvitationRead,
     ExamInvitationRequest,
     ExamRead,
+    ExamReadinessRead,
+    ExamReopenRead,
     ExamScheduleRead,
     ExamScheduleRequest,
     ExamUpdate,
@@ -83,6 +86,45 @@ def delete_exam(
 ) -> dict:
     service.delete(class_id, exam_id, teacher)
     return success_response(data={})
+
+
+@router.get("/{exam_id}/readiness")
+def get_exam_readiness(
+    class_id: UUID,
+    exam_id: UUID,
+    teacher: User = Depends(get_current_teacher),
+    service: ExamService = Depends(get_exam_service),
+) -> dict:
+    readiness = service.get_readiness(class_id, exam_id, teacher)
+    return success_response(data=ExamReadinessRead.model_validate(readiness).model_dump(mode="json"))
+
+
+@router.post("/{exam_id}/finalize")
+def finalize_exam(
+    class_id: UUID,
+    exam_id: UUID,
+    teacher: User = Depends(get_current_teacher),
+    service: ExamService = Depends(get_exam_service),
+) -> dict:
+    result = service.finalize(class_id, exam_id, teacher)
+    return success_response(
+        data=ExamFinalizeRead.model_validate(result).model_dump(mode="json"),
+        message="Exam finalized successfully.",
+    )
+
+
+@router.post("/{exam_id}/reopen")
+def reopen_exam(
+    class_id: UUID,
+    exam_id: UUID,
+    teacher: User = Depends(get_current_teacher),
+    service: ExamService = Depends(get_exam_service),
+) -> dict:
+    result = service.reopen(class_id, exam_id, teacher)
+    return success_response(
+        data=ExamReopenRead.model_validate(result).model_dump(mode="json"),
+        message=result["message"],
+    )
 
 
 @router.post("/{exam_id}/schedule")

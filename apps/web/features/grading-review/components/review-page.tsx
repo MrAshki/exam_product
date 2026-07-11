@@ -17,6 +17,7 @@ import { ReviewSummary } from "@/features/grading-review/components/review-summa
 import { SubmissionFilter, filterSubmissions, SubmissionList } from "@/features/grading-review/components/submission-list";
 import { SubmissionReviewPanel } from "@/features/grading-review/components/submission-review-panel";
 import { useExamReview } from "@/features/grading-review/hooks";
+import { formatDecimal } from "@/lib/decimal";
 import { getErrorMessage } from "@/lib/errors";
 import { routes } from "@/lib/routes";
 
@@ -74,7 +75,7 @@ export function ReviewPage({ classId, examId }: ReviewPageProps) {
         action={
           <div className="flex flex-wrap items-center gap-2">
             <ReviewStatusBadge status={review.data.exam.status} />
-            <Badge>{review.data.exam.total_points ?? "—"} نمره</Badge>
+            <Badge>{review.data.exam.total_points ? formatDecimal(review.data.exam.total_points) : "—"} نمره</Badge>
           </div>
         }
       />

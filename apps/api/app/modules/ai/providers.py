@@ -1,4 +1,5 @@
 import json
+from decimal import Decimal
 from typing import Any, Protocol
 
 import httpx
@@ -54,34 +55,34 @@ class MockProvider:
 
         if task_name != "suggest_essay_rubric":
             raise ai_task_not_supported(task_name)
-        total_points = int((metadata or {}).get("total_points") or 10)
-        if total_points <= 1:
+        total_points = Decimal(str((metadata or {}).get("total_points") or "10"))
+        if total_points <= Decimal("1"):
             criteria = [
                 {
                     "name": "Accuracy",
                     "description": "Correctness of the answer",
-                    "points": total_points,
+                    "points": float(total_points),
                 }
             ]
         else:
-            accuracy_points = max(1, round(total_points * 0.6))
+            accuracy_points = max(Decimal("0.01"), (total_points * Decimal("0.6")).quantize(Decimal("0.01")))
             clarity_points = total_points - accuracy_points
             if clarity_points <= 0:
-                accuracy_points = total_points - 1
-                clarity_points = 1
+                accuracy_points = total_points - Decimal("0.01")
+                clarity_points = Decimal("0.01")
             criteria = [
                 {
                     "name": "Accuracy",
                     "description": "Correctness of the answer",
-                    "points": accuracy_points,
+                    "points": float(accuracy_points),
                 },
                 {
                     "name": "Clarity",
                     "description": "Clear explanation",
-                    "points": clarity_points,
+                    "points": float(clarity_points),
                 },
             ]
-        rubric = {"criteria": criteria, "total_points": total_points}
+        rubric = {"criteria": criteria, "total_points": float(total_points)}
         text = json.dumps(rubric)
         return GatewayResult(
             text=text,

@@ -32,10 +32,11 @@ type BlueprintFormProps = {
   blueprint?: Blueprint | null;
   pending?: boolean;
   error?: unknown;
+  disabled?: boolean;
   onSubmit: (payload: BlueprintPayload) => void;
 };
 
-export function BlueprintForm({ blueprint, pending, error, onSubmit }: BlueprintFormProps) {
+export function BlueprintForm({ blueprint, pending, error, disabled, onSubmit }: BlueprintFormProps) {
   const form = useForm<BlueprintFormInput, unknown, BlueprintFormValues>({
     resolver: zodResolver(blueprintSchema),
     defaultValues: {
@@ -72,19 +73,19 @@ export function BlueprintForm({ blueprint, pending, error, onSubmit }: Blueprint
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <label className="space-y-1.5">
           <span className="text-sm font-medium text-ink-700">تعداد سوال تستی</span>
-          <Input type="number" min={0} {...form.register("multiple_choice_count")} />
+          <Input type="number" min={0} {...form.register("multiple_choice_count")} disabled={disabled} />
         </label>
         <label className="space-y-1.5">
           <span className="text-sm font-medium text-ink-700">تعداد سوال کوتاه‌پاسخ</span>
-          <Input type="number" min={0} {...form.register("short_answer_count")} />
+          <Input type="number" min={0} {...form.register("short_answer_count")} disabled={disabled} />
         </label>
         <label className="space-y-1.5">
           <span className="text-sm font-medium text-ink-700">تعداد سوال تشریحی</span>
-          <Input type="number" min={0} {...form.register("essay_count")} />
+          <Input type="number" min={0} {...form.register("essay_count")} disabled={disabled} />
         </label>
         <label className="space-y-1.5">
           <span className="text-sm font-medium text-ink-700">تعداد سوال درست/غلط</span>
-          <Input type="number" min={0} {...form.register("true_false_count")} />
+          <Input type="number" min={0} {...form.register("true_false_count")} disabled={disabled} />
         </label>
       </div>
       {form.formState.errors.root ? null : (
@@ -97,7 +98,7 @@ export function BlueprintForm({ blueprint, pending, error, onSubmit }: Blueprint
         <p className="text-sm text-ink-500">ساختار فعلی {blueprint.total_question_count} جایگاه سوال دارد.</p>
       ) : null}
       <div className="flex justify-end">
-        <Button type="submit" disabled={pending}>
+        <Button type="submit" disabled={pending || disabled}>
           <Save size={16} />
           {pending ? "در حال ذخیره" : blueprint ? "به‌روزرسانی ساختار آزمون" : "ساخت ساختار آزمون"}
         </Button>

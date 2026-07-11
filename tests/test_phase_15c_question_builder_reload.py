@@ -219,7 +219,7 @@ def test_teacher_question_list_returns_full_saved_draft_fields_and_options() -> 
     assert listed_mc["class_id"] == str(context["class_id"])
     assert listed_mc["exam_id"] == str(context["exam_id"])
     assert listed_mc["text"] == "Which option is correct?"
-    assert listed_mc["points"] == 4
+    assert listed_mc["points"] == "4.00"
     assert listed_mc["correct_answer"] == "B"
     assert listed_mc["correct_answer_data"] == {"selected_option": "B"}
     assert listed_mc["options"] == [

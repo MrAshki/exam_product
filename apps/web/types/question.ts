@@ -1,3 +1,5 @@
+import type { DecimalValue } from "@/lib/decimal";
+
 export type QuestionType = "multiple_choice" | "short_answer" | "essay" | "true_false";
 
 export type QuestionStatus = "empty" | "draft" | "extracted" | "needs_review" | "confirmed";
@@ -17,7 +19,7 @@ export type QuestionSlot = {
   type: QuestionType;
   status: QuestionStatus;
   text: string | null;
-  points: number;
+  points: DecimalValue;
   teacher_confirmed: boolean;
   needs_teacher_review: boolean;
 };
@@ -35,7 +37,7 @@ export type Question = QuestionSlot & {
 
 export type QuestionUpdatePayload = {
   text?: string | null;
-  points?: number | null;
+  points?: DecimalValue | null;
   correct_answer?: string | null;
   correct_answer_data?: unknown;
   expected_answer?: string | null;

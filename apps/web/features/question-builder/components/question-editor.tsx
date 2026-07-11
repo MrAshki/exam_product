@@ -14,12 +14,12 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { EssayFields } from "@/features/question-builder/components/essay-fields";
 import { MultipleChoiceFields } from "@/features/question-builder/components/multiple-choice-fields";
-import { QuestionConfirmPanel } from "@/features/question-builder/components/question-confirm-panel";
 import { RubricSuggestionPanel } from "@/features/question-builder/components/rubric-suggestion-panel";
 import { ShortAnswerFields } from "@/features/question-builder/components/short-answer-fields";
 import { TrueFalseFields } from "@/features/question-builder/components/true-false-fields";
 import type { QuestionFormValues } from "@/features/question-builder/form-types";
-import { useConfirmQuestion, useSuggestRubric, useUpdateQuestion } from "@/features/question-builder/hooks";
+import { useSuggestRubric, useUpdateQuestion } from "@/features/question-builder/hooks";
+import { decimalToInput } from "@/lib/decimal";
 import { getErrorMessage } from "@/lib/errors";
 import type { Question, QuestionOption, QuestionSlot, QuestionUpdatePayload } from "@/types/question";
 
@@ -29,7 +29,8 @@ const questionSchema = z.object({
     .string()
     .trim()
     .min(1, "نمره را وارد کنید.")
-    .refine((value) => Number.isInteger(Number(value)) && Number(value) > 0, "نمره باید عدد صحیح مثبت باشد."),
+    .refine((value) => Number.isFinite(Number(value)) && Number(value) > 0, "نمره باید عدد مثبت باشد.")
+    .refine((value) => Number.isInteger(Number(value) * 100), "نمره حداکثر دو رقم اعشار دارد."),
   grading_instructions: z.string(),
   expected_answer: z.string(),
   correct_answer: z.string(),
@@ -48,6 +49,7 @@ type QuestionEditorProps = {
   classId: string;
   examId: string;
   question?: Question | QuestionSlot | null;
+  editable: boolean;
   onQuestionHydrated: (question: Question) => void;
 };
 
@@ -139,7 +141,7 @@ function buildOptions(values: QuestionFormOutput): QuestionOption[] {
 function buildPayload(question: Question | QuestionSlot, values: QuestionFormOutput): QuestionUpdatePayload {
   const common: QuestionUpdatePayload = {
     text: values.text.trim(),
-    points: Number(values.points),
+    points: values.points.trim(),
     grading_instructions: optionalText(values.grading_instructions)
   };
 
@@ -177,19 +179,18 @@ function buildPayload(question: Question | QuestionSlot, values: QuestionFormOut
   };
 }
 
-export function QuestionEditor({ classId, examId, question, onQuestionHydrated }: QuestionEditorProps) {
+export function QuestionEditor({ classId, examId, question, editable, onQuestionHydrated }: QuestionEditorProps) {
   const [suggestions, setSuggestions] = useState<Record<string, unknown>>({});
   const [localError, setLocalError] = useState<Error | null>(null);
   const updateQuestion = useUpdateQuestion(classId, examId, question?.id ?? "");
-  const confirmQuestion = useConfirmQuestion(classId, examId, question?.id ?? "");
   const suggestRubric = useSuggestRubric(classId, examId, question?.id ?? "");
-  const confirmed = Boolean(question?.teacher_confirmed || question?.status === "confirmed");
+  const locked = !editable;
   const activeSuggestion = question ? suggestions[question.id] ?? (question as Question | undefined)?.rubric_ai_suggested : undefined;
 
   const defaultValues = useMemo<QuestionFormInput>(
     () => ({
       text: question?.text ?? "",
-      points: question?.points ? String(question.points) : "",
+      points: question?.points ? decimalToInput(question.points) : "",
       grading_instructions: (question as Question | undefined)?.grading_instructions ?? "",
       expected_answer: (question as Question | undefined)?.expected_answer ?? "",
       correct_answer:
@@ -249,16 +250,6 @@ export function QuestionEditor({ classId, examId, question, onQuestionHydrated }
     }
   }
 
-  async function handleConfirm(values: QuestionFormOutput) {
-    try {
-      const saved = await saveDraft(values);
-      const confirmedQuestion = await confirmQuestion.mutateAsync();
-      onQuestionHydrated({ ...saved, ...confirmedQuestion, rubric_ai_suggested: activeSuggestion });
-    } catch {
-      return;
-    }
-  }
-
   function renderTypeFields() {
     const currentQuestion = question;
     if (!currentQuestion) {
@@ -271,46 +262,47 @@ export function QuestionEditor({ classId, examId, question, onQuestionHydrated }
           register={form.register}
           errors={form.formState.errors}
           setValue={form.setValue}
+          disabled={locked}
         />
       );
     }
     if (currentQuestion.type === "true_false") {
-      return <TrueFalseFields register={form.register} errors={form.formState.errors} setValue={form.setValue} />;
+      return <TrueFalseFields register={form.register} errors={form.formState.errors} setValue={form.setValue} disabled={locked} />;
     }
     if (currentQuestion.type === "essay") {
-      return <EssayFields register={form.register} errors={form.formState.errors} setValue={form.setValue} />;
+      return <EssayFields register={form.register} errors={form.formState.errors} setValue={form.setValue} disabled={locked} />;
     }
-    return <ShortAnswerFields register={form.register} errors={form.formState.errors} setValue={form.setValue} />;
+    return <ShortAnswerFields register={form.register} errors={form.formState.errors} setValue={form.setValue} disabled={locked} />;
   }
 
   return (
-    <div className="space-y-4">
+    <div id={`question-editor-${question.id}`} className="scroll-mt-24 space-y-4" tabIndex={-1}>
       <Card>
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <div>
             <h2 className="text-lg font-semibold text-ink-900">
               سوال {question.order_index}، {typeLabels[question.type]}
             </h2>
-            <p className="mt-1 text-sm text-ink-500">وضعیت: {confirmed ? "تایید شده" : question.status}</p>
+            <p className="mt-1 text-sm text-ink-500">وضعیت سوال: {question.status}</p>
           </div>
-          {confirmed ? <span className="rounded-full bg-brand-50 px-3 py-1 text-xs font-medium text-brand-700">نهایی</span> : null}
+          {locked ? <span className="rounded-full bg-brand-50 px-3 py-1 text-xs font-medium text-brand-700">قفل شده</span> : null}
         </div>
-        {confirmed ? (
-          <Alert>سوال تایید شده است و backend اجازه ویرایش مستقیم آن را نمی‌دهد.</Alert>
+        {locked ? (
+          <Alert>این آزمون نهایی شده یا از مرحله draft عبور کرده است. برای ویرایش، قبل از زمان‌بندی آزمون را بازگشایی کنید.</Alert>
         ) : null}
         <form className="mt-4 space-y-4" onSubmit={form.handleSubmit(saveDraft)}>
           <FormError message={updateQuestion.error ? getErrorMessage(updateQuestion.error) : null} />
           {localError ? <Alert variant="error">{localError.message}</Alert> : null}
           <label className="block space-y-1.5">
             <span className="text-sm font-medium text-ink-700">متن سوال</span>
-            <Textarea {...form.register("text")} placeholder="متن سوال را دستی وارد کنید." disabled={confirmed} />
+            <Textarea {...form.register("text")} placeholder="متن سوال را دستی وارد کنید." disabled={locked} />
             {form.formState.errors.text ? (
               <span className="text-xs text-rose-700">{form.formState.errors.text.message}</span>
             ) : null}
           </label>
           <label className="block max-w-xs space-y-1.5">
             <span className="text-sm font-medium text-ink-700">نمره</span>
-            <Input type="number" min={1} {...form.register("points")} disabled={confirmed} />
+            <Input type="number" min="0.01" step="0.01" inputMode="decimal" {...form.register("points")} disabled={locked} />
             {form.formState.errors.points ? (
               <span className="text-xs text-rose-700">{form.formState.errors.points.message}</span>
             ) : null}
@@ -318,10 +310,10 @@ export function QuestionEditor({ classId, examId, question, onQuestionHydrated }
           {renderTypeFields()}
           <label className="block space-y-1.5">
             <span className="text-sm font-medium text-ink-700">راهنمای تصحیح</span>
-            <Textarea {...form.register("grading_instructions")} placeholder="اختیاری" disabled={confirmed} />
+            <Textarea {...form.register("grading_instructions")} placeholder="اختیاری" disabled={locked} />
           </label>
           <div className="flex justify-end">
-            <Button type="submit" disabled={updateQuestion.isPending || confirmed}>
+            <Button type="submit" disabled={updateQuestion.isPending || locked}>
               <Save size={16} />
               {updateQuestion.isPending ? "در حال ذخیره" : "ذخیره draft"}
             </Button>
@@ -329,7 +321,7 @@ export function QuestionEditor({ classId, examId, question, onQuestionHydrated }
         </form>
       </Card>
 
-      {question.type === "essay" && !confirmed ? (
+      {question.type === "essay" && !locked ? (
         <RubricSuggestionPanel
           suggestion={activeSuggestion}
           pending={suggestRubric.isPending}
@@ -339,13 +331,6 @@ export function QuestionEditor({ classId, examId, question, onQuestionHydrated }
           onAccept={() => form.setValue("rubric", stringifyRubric(activeSuggestion), { shouldDirty: true })}
         />
       ) : null}
-
-      <QuestionConfirmPanel
-        question={question as Question}
-        pending={confirmQuestion.isPending || updateQuestion.isPending}
-        error={confirmQuestion.error}
-        onConfirm={form.handleSubmit(handleConfirm)}
-      />
     </div>
   );
 }

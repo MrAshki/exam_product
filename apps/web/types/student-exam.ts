@@ -1,3 +1,5 @@
+import type { DecimalValue } from "@/lib/decimal";
+
 export type StudentExamAccessStatus = "waiting" | "ready" | "in_progress" | "submitted" | string;
 
 export type StudentExamQuestionType = "multiple_choice" | "true_false" | "short_answer" | "essay";
@@ -22,7 +24,7 @@ export type StudentExamQuestion = {
   order_index: number;
   type: StudentExamQuestionType;
   text: string;
-  points: number;
+  points: DecimalValue;
   options: StudentExamOption[];
 };
 

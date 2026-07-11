@@ -1,8 +1,7 @@
 from __future__ import annotations
 
 import secrets
-from collections import defaultdict
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
 from sqlalchemy.exc import IntegrityError
@@ -14,17 +13,25 @@ from app.modules.exams.errors import (
     blueprint_not_found,
     class_not_found,
     email_send_failed,
+    exam_already_draft,
     exam_already_scheduled,
     exam_already_has_blueprint,
+    exam_cannot_be_reopened,
+    exam_has_submissions,
+    exam_has_tokens,
+    exam_in_progress,
     exam_not_draft,
+    exam_not_finalized,
     exam_not_found,
     exam_not_ready,
     exam_not_scheduled,
     exam_requires_students,
+    exam_schedule_invalid,
     exam_title_already_exists,
     validation_error,
 )
 from app.modules.exams.models import Exam, ExamBlueprint, ExamToken
+from app.modules.exams.readiness import ExamReadinessValidator
 from app.modules.exams.repository import ExamRepository
 from app.modules.exams.schemas import (
     BlueprintCreate,
@@ -37,7 +44,7 @@ from app.modules.exams.schemas import (
 from app.modules.exams.status import ExamStatus, QuestionStatus, QuestionType
 from app.modules.notifications.constants import EmailType
 from app.modules.notifications.service import NotificationService
-from app.modules.questions.models import Question, QuestionOption
+from app.modules.questions.models import Question
 from app.modules.students.models import Student
 
 
@@ -95,6 +102,7 @@ class ExamService:
         teacher: User,
     ) -> Exam:
         exam = self.get(class_id, exam_id, teacher)
+        self._ensure_exam_is_draft(exam)
         update_data = payload.model_dump(exclude_unset=True)
 
         if "title" in update_data and update_data["title"] is not None:
@@ -149,12 +157,15 @@ class ExamService:
             raise exam_not_found()
         if exam.status == ExamStatus.SCHEDULED.value:
             raise exam_already_scheduled()
-        self._ensure_exam_is_draft(exam)
+        if exam.status != ExamStatus.FINALIZED.value:
+            raise exam_not_finalized({"status": exam.status})
 
         students = self.repository.list_active_students_for_class(class_id, teacher.id)
         if not students:
             raise exam_not_ready({"students": ["Class must have at least one active student."]})
-        self._validate_exam_ready(exam, students, teacher)
+        readiness = self._build_readiness(exam, teacher)
+        if not readiness["is_ready"]:
+            raise exam_not_ready({"readiness": readiness})
 
         exam.start_time = payload.start_time
         exam.end_time = payload.end_time
@@ -175,6 +186,103 @@ class ExamService:
             "end_time": saved_exam.end_time,
             "duration_minutes": saved_exam.duration_minutes,
             "created_exam_tokens": len(tokens),
+        }
+
+    def get_readiness(self, class_id: UUID, exam_id: UUID, teacher: User) -> dict:
+        exam = self.get(class_id, exam_id, teacher)
+        readiness = self._build_readiness(exam, teacher)
+        readiness.update(self._build_reopen_state(exam, teacher))
+        return readiness
+
+    def finalize(self, class_id: UUID, exam_id: UUID, teacher: User) -> dict:
+        self._ensure_class_owned(class_id, teacher)
+        exam = self.repository.get_by_id_for_teacher_class_for_update(exam_id, class_id, teacher.id)
+        if exam is None:
+            raise exam_not_found()
+        self._ensure_exam_is_draft(exam)
+
+        readiness = self._build_readiness(exam, teacher)
+        if not readiness["is_ready"]:
+            raise exam_not_ready({"readiness": readiness})
+
+        questions = self.repository.list_questions_for_exam(exam.id, class_id, teacher.id)
+        for question in questions:
+            question.status = QuestionStatus.CONFIRMED.value
+            question.teacher_confirmed = True
+            question.needs_teacher_review = False
+
+        exam.status = ExamStatus.FINALIZED.value
+        try:
+            saved_exam = self.repository.save_exam_with_questions(exam, questions)
+        except IntegrityError:
+            self.repository.rollback()
+            raise exam_not_ready({"exam": ["Exam could not be finalized."]}) from None
+
+        finalized_readiness = self._build_readiness(saved_exam, teacher)
+        return {
+            "exam_id": saved_exam.id,
+            "status": saved_exam.status,
+            "total_question_count": finalized_readiness["total_question_count"],
+            "complete_question_count": finalized_readiness["complete_question_count"],
+            "calculated_question_points": finalized_readiness["calculated_question_points"],
+            "exam_total_points": finalized_readiness["exam_total_points"],
+            "scheduling_allowed": finalized_readiness["scheduling_allowed"],
+            "pdf_download_allowed": False,
+        }
+
+    def reopen(self, class_id: UUID, exam_id: UUID, teacher: User) -> dict:
+        self._ensure_class_owned(class_id, teacher)
+        exam = self.repository.get_by_id_for_teacher_class_for_update(exam_id, class_id, teacher.id)
+        if exam is None:
+            raise exam_not_found()
+        previous_status = exam.status
+        reopen_state = self._build_reopen_state(exam, teacher)
+        submission_count = self.repository.count_active_submissions_for_exam(exam.id, class_id, teacher.id)
+        if submission_count:
+            raise exam_has_submissions(self._reopen_details(exam, submission_count=submission_count))
+        if previous_status == ExamStatus.DRAFT.value:
+            raise exam_already_draft(self._reopen_details(exam))
+        if previous_status == ExamStatus.FINALIZED.value:
+            if self.repository.has_active_tokens_for_exam(exam.id, class_id, teacher.id):
+                raise exam_has_tokens({"exam_id": str(exam.id)})
+        elif previous_status == ExamStatus.SCHEDULED.value:
+            self._ensure_scheduled_reopen_allowed(exam)
+        else:
+            raise exam_cannot_be_reopened(self._reopen_details(exam))
+
+        questions = self.repository.list_questions_for_exam(exam.id, class_id, teacher.id)
+        for question in questions:
+            question.status = QuestionStatus.DRAFT.value if self._question_has_content(question) else QuestionStatus.EMPTY.value
+            question.teacher_confirmed = False
+
+        tokens_to_invalidate: list[ExamToken] = []
+        if previous_status == ExamStatus.SCHEDULED.value:
+            tokens_to_invalidate = self.repository.list_active_tokens_for_exam(exam.id, class_id, teacher.id)
+            for token in tokens_to_invalidate:
+                token.soft_delete()
+            exam.start_time = None
+            exam.end_time = None
+
+        exam.status = ExamStatus.DRAFT.value
+        try:
+            saved_exam = self.repository.save_reopened_exam(exam, questions, tokens_to_invalidate)
+        except IntegrityError:
+            self.repository.rollback()
+            raise exam_not_ready({"exam": ["Exam could not be reopened."]}) from None
+        scheduled_reopen = previous_status == ExamStatus.SCHEDULED.value
+        return {
+            "exam_id": saved_exam.id,
+            "previous_status": previous_status,
+            "status": saved_exam.status,
+            "invalidated_token_count": len(tokens_to_invalidate),
+            "start_time": saved_exam.start_time,
+            "end_time": saved_exam.end_time,
+            "questions_reset": len(questions),
+            "message": (
+                "زمان‌بندی لغو شد و آزمون برای ویرایش بازگشایی شد."
+                if scheduled_reopen
+                else "آزمون برای ویرایش بازگشایی شد."
+            ),
         }
 
     def send_invitations(
@@ -271,8 +379,6 @@ class ExamService:
         blueprint = self.repository.get_blueprint_for_exam(exam.id, class_id, teacher.id)
         if blueprint is None:
             raise blueprint_not_found()
-        if self.repository.has_confirmed_questions(exam.id, class_id, teacher.id):
-            raise exam_not_draft()
 
         self._apply_blueprint_counts(blueprint, payload)
         questions = self._build_question_slots(class_id, exam_id, teacher, payload)
@@ -303,97 +409,162 @@ class ExamService:
                 {"duration_minutes": ["Duration must not exceed the scheduled time window."]}
             )
 
-    def _validate_exam_ready(self, exam: Exam, students: list[Student], teacher: User) -> None:
-        errors: dict[str, list[str]] = {}
+    def _build_readiness(self, exam: Exam, teacher: User) -> dict:
         blueprint = self.repository.get_blueprint_for_exam(exam.id, exam.class_id, teacher.id)
-        if blueprint is None:
-            errors.setdefault("blueprint", []).append("Blueprint is required.")
-
         questions = self.repository.list_questions_for_exam(exam.id, exam.class_id, teacher.id)
-        if not questions:
-            errors.setdefault("questions", []).append("Question slots are required.")
-        elif blueprint is not None and len(questions) != blueprint.total_question_count:
-            errors.setdefault("questions", []).append("Question slot count must match the blueprint.")
-
-        options_by_question_id = self._options_by_question_id(
-            self.repository.list_options_for_exam(exam.id, exam.class_id, teacher.id)
+        options = self.repository.list_options_for_exam(exam.id, exam.class_id, teacher.id)
+        return ExamReadinessValidator().validate(
+            exam=exam,
+            blueprint=blueprint,
+            questions=questions,
+            options=options,
         )
-        for question in questions:
-            self._validate_question_ready(question, options_by_question_id.get(question.id, []), errors)
 
-        total_points = sum(question.points for question in questions)
-        if total_points != exam.total_points:
-            errors.setdefault("total_points", []).append("Question points must equal exam total points.")
-
-        if not students:
-            errors.setdefault("students", []).append("Class must have at least one active student.")
-
-        if errors:
-            raise exam_not_ready(errors)
-
-    def _validate_question_ready(
-        self,
-        question: Question,
-        options: list[QuestionOption],
-        errors: dict[str, list[str]],
-    ) -> None:
-        key = f"question_{question.order_index}"
-        if question.status != QuestionStatus.CONFIRMED.value or not question.teacher_confirmed:
-            errors.setdefault(key, []).append("Question must be teacher confirmed.")
-        if question.needs_teacher_review:
-            errors.setdefault(key, []).append("Question must not need teacher review.")
-        if question.status in {
-            QuestionStatus.EMPTY.value,
-            QuestionStatus.DRAFT.value,
-            QuestionStatus.EXTRACTED.value,
-        }:
-            errors.setdefault(key, []).append("Question must not be empty, draft, or extracted.")
-        if not question.text:
-            errors.setdefault(key, []).append("Question text is required.")
-        if question.points <= 0:
-            errors.setdefault(key, []).append("Question points must be greater than 0.")
-
-        if question.type == QuestionType.MULTIPLE_CHOICE.value:
-            self._validate_multiple_choice_ready(question, options, errors, key)
-        elif question.type == QuestionType.TRUE_FALSE.value:
-            if question.correct_answer not in {"true", "false"}:
-                errors.setdefault(key, []).append("True/false question requires a correct answer.")
-        elif question.type == QuestionType.SHORT_ANSWER.value:
-            if not question.expected_answer:
-                errors.setdefault(key, []).append("Short answer question requires an expected answer.")
-        elif question.type == QuestionType.ESSAY.value:
-            if not question.expected_answer:
-                errors.setdefault(key, []).append("Essay question requires an expected answer.")
-            if not question.rubric_teacher_confirmed:
-                errors.setdefault(key, []).append("Essay rubric must be teacher confirmed.")
-        else:
-            errors.setdefault(key, []).append("Question type is not supported.")
+    def _build_reopen_state(self, exam: Exam, teacher: User) -> dict:
+        submission_count = self.repository.count_active_submissions_for_exam(
+            exam.id,
+            exam.class_id,
+            teacher.id,
+        )
+        if submission_count:
+            return self._reopen_state(
+                allowed=False,
+                mode="blocked",
+                code="EXAM_HAS_SUBMISSIONS",
+                message="برای این آزمون پاسخ دانش‌آموز ثبت شده است و تغییر نسخه اصلی آزمون مجاز نیست.",
+                has_submissions=True,
+            )
+        if exam.status == ExamStatus.DRAFT.value:
+            return self._reopen_state(
+                allowed=False,
+                mode="blocked",
+                code="EXAM_ALREADY_DRAFT",
+                message="آزمون در حال حاضر پیش‌نویس است.",
+            )
+        if exam.status == ExamStatus.FINALIZED.value:
+            has_tokens = self.repository.has_active_tokens_for_exam(exam.id, exam.class_id, teacher.id)
+            if has_tokens:
+                return self._reopen_state(
+                    allowed=False,
+                    mode="blocked",
+                    code="EXAM_HAS_TOKENS",
+                    message="برای این آزمون لینک فعال وجود دارد و بازگشایی مستقیم مجاز نیست.",
+                )
+            return self._reopen_state(
+                allowed=True,
+                mode="finalized_reopen",
+                message="آزمون می‌تواند برای ویرایش بازگشایی شود.",
+            )
+        if exam.status == ExamStatus.SCHEDULED.value:
+            try:
+                schedule_state = self._scheduled_reopen_state(exam)
+            except ValueError:
+                return self._reopen_state(
+                    allowed=False,
+                    mode="blocked",
+                    code="EXAM_SCHEDULE_INVALID",
+                    message="زمان‌بندی آزمون نامعتبر است و بازگشایی امن نیست.",
+                )
+            if schedule_state == "active":
+                return self._reopen_state(
+                    allowed=False,
+                    mode="blocked",
+                    code="EXAM_IN_PROGRESS",
+                    message="آزمون در حال برگزاری است و تا پایان بازه آزمون قابل ویرایش نیست.",
+                    is_in_progress=True,
+                    invalidates_tokens=True,
+                )
+            return self._reopen_state(
+                allowed=True,
+                mode=schedule_state,
+                message=(
+                    "زمان‌بندی لغو می‌شود و لینک‌های قبلی دانش‌آموزان غیرفعال خواهند شد."
+                ),
+                invalidates_tokens=True,
+            )
+        return self._reopen_state(
+            allowed=False,
+            mode="blocked",
+            code="EXAM_CANNOT_BE_REOPENED",
+            message="این آزمون در این وضعیت قابل بازگشایی نیست.",
+        )
 
     @staticmethod
-    def _validate_multiple_choice_ready(
-        question: Question,
-        options: list[QuestionOption],
-        errors: dict[str, list[str]],
-        key: str,
-    ) -> None:
-        if len(options) < 2:
-            errors.setdefault(key, []).append("Multiple choice question requires at least 2 options.")
-        correct_options = [option for option in options if option.is_correct]
-        if len(correct_options) != 1:
-            errors.setdefault(key, []).append("Multiple choice question requires exactly one correct option.")
-        if not question.correct_answer:
-            errors.setdefault(key, []).append("Multiple choice question requires a correct answer.")
-        elif correct_options and question.correct_answer.strip().lower() != correct_options[0].option_key.strip().lower():
-            errors.setdefault(key, []).append("Correct answer must match the correct option key.")
+    def _reopen_state(
+        *,
+        allowed: bool,
+        mode: str,
+        message: str,
+        code: str | None = None,
+        invalidates_tokens: bool = False,
+        has_submissions: bool = False,
+        is_in_progress: bool = False,
+    ) -> dict:
+        return {
+            "reopen_allowed": allowed,
+            "reopen_mode": mode,
+            "reopen_block_code": None if allowed else code,
+            "reopen_block_message": None if allowed else message,
+            "invalidates_tokens": invalidates_tokens,
+            "has_submissions": has_submissions,
+            "is_in_progress": is_in_progress,
+        }
+
+    def _ensure_scheduled_reopen_allowed(self, exam: Exam) -> None:
+        try:
+            state = self._scheduled_reopen_state(exam)
+        except ValueError:
+            raise exam_schedule_invalid(self._reopen_details(exam)) from None
+        if state == "active":
+            raise exam_in_progress(self._reopen_details(exam))
+
+    def _scheduled_reopen_state(self, exam: Exam) -> str:
+        if exam.start_time is None or exam.end_time is None:
+            raise ValueError("Scheduled exam is missing start_time or end_time.")
+        start_time = self._as_aware_utc(exam.start_time)
+        end_time = self._as_aware_utc(exam.end_time)
+        if start_time >= end_time:
+            raise ValueError("Scheduled exam has an invalid time window.")
+        now = self._now()
+        if now < start_time:
+            return "scheduled_before_start"
+        if start_time <= now < end_time:
+            return "active"
+        return "scheduled_after_end"
+
+    def _reopen_details(self, exam: Exam, *, submission_count: int = 0) -> dict:
+        return {
+            "status": exam.status,
+            "start_time": exam.start_time.isoformat() if exam.start_time else None,
+            "end_time": exam.end_time.isoformat() if exam.end_time else None,
+            "current_time": self._now().isoformat(),
+            "submission_count": submission_count,
+        }
 
     @staticmethod
-    def _options_by_question_id(
-        options: list[QuestionOption],
-    ) -> dict[UUID, list[QuestionOption]]:
-        grouped: dict[UUID, list[QuestionOption]] = defaultdict(list)
-        for option in options:
-            grouped[option.question_id].append(option)
-        return grouped
+    def _question_has_content(question: Question) -> bool:
+        return any(
+            [
+                bool(question.text),
+                bool(question.correct_answer),
+                bool(question.correct_answer_data),
+                bool(question.expected_answer),
+                question.points > 0,
+                bool(question.grading_instructions),
+                bool(question.rubric),
+                bool(question.rubric_ai_suggested),
+            ]
+        )
+
+    @staticmethod
+    def _now() -> datetime:
+        return datetime.now(timezone.utc)
+
+    @staticmethod
+    def _as_aware_utc(value: datetime) -> datetime:
+        if value.tzinfo is None:
+            return value.replace(tzinfo=timezone.utc)
+        return value.astimezone(timezone.utc)
 
     def _ensure_tokens_for_active_students(self, exam: Exam, students: list[Student]) -> None:
         tokens = self._build_missing_tokens(exam, students)

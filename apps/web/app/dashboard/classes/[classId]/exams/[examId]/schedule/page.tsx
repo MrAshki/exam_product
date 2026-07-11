@@ -12,8 +12,9 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { LoadingBlock } from "@/components/ui/loading-block";
 import { AuthGuard } from "@/features/auth/components/auth-guard";
+import { ExamReadinessPanel } from "@/features/question-builder/components/exam-readiness-panel";
 import { QuestionProgress } from "@/features/question-builder/components/question-progress";
-import { useBuilderExam, useQuestions } from "@/features/question-builder/hooks";
+import { useBuilderExam, useExamReadiness, useFinalizeExam, useQuestions, useReopenExam } from "@/features/question-builder/hooks";
 import { InvitationPanel } from "@/features/scheduling/components/invitation-panel";
 import { ScheduleForm } from "@/features/scheduling/components/schedule-form";
 import { useScheduleExam, useSendInvitations } from "@/features/scheduling/hooks";
@@ -25,12 +26,24 @@ function routeParam(value: string | string[] | undefined) {
   return Array.isArray(value) ? value[0] : value ?? "";
 }
 
+const examStatusLabels: Record<string, string> = {
+  draft: "پیش‌نویس",
+  finalized: "نهایی‌شده",
+  scheduled: "زمان‌بندی‌شده",
+  review_required: "نیازمند بازبینی",
+  approved: "تأییدشده",
+  published: "منتشرشده"
+};
+
 function ScheduleContent() {
   const params = useParams();
   const classId = routeParam(params.classId);
   const examId = routeParam(params.examId);
   const exam = useBuilderExam(classId, examId);
   const questions = useQuestions(classId, examId);
+  const readiness = useExamReadiness(classId, examId);
+  const finalizeExam = useFinalizeExam(classId, examId);
+  const reopenExam = useReopenExam(classId, examId);
   const scheduleExam = useScheduleExam(classId, examId);
   const sendInvitations = useSendInvitations(classId, examId);
   const [scheduleMessage, setScheduleMessage] = useState<string | undefined>();
@@ -49,7 +62,7 @@ function ScheduleContent() {
       <PageHeader
         title="زمان‌بندی آزمون"
         description={exam.data ? exam.data.title : "ثبت بازه زمانی و ارسال دعوت‌نامه"}
-        action={<Badge>{exam.data?.status ?? "—"}</Badge>}
+        action={<Badge>{exam.data ? examStatusLabels[exam.data.status] ?? exam.data.status : "—"}</Badge>}
       />
       <div className="flex flex-wrap gap-2">
         <Link href={routes.examBuilder(classId, examId)}>
@@ -67,7 +80,21 @@ function ScheduleContent() {
       {exam.isError ? <Alert variant="error">{getErrorMessage(exam.error)}</Alert> : null}
       {questions.isError ? <Alert variant="error">{getErrorMessage(questions.error)}</Alert> : null}
 
-      <QuestionProgress exam={exam.data} questions={questions.data ?? []} />
+      <QuestionProgress exam={exam.data} questions={questions.data ?? []} readiness={readiness.data} />
+
+      <ExamReadinessPanel
+        classId={classId}
+        exam={exam.data}
+        readiness={readiness.data}
+        loading={readiness.isLoading}
+        error={readiness.error}
+        finalizePending={finalizeExam.isPending}
+        finalizeError={finalizeExam.error}
+        reopenPending={reopenExam.isPending}
+        reopenError={reopenExam.error}
+        onFinalize={() => finalizeExam.mutate()}
+        onReopen={() => reopenExam.mutate()}
+      />
 
       <Card>
         <h2 className="mb-4 text-base font-semibold text-ink-900">فرم زمان‌بندی</h2>

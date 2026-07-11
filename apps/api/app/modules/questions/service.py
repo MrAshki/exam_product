@@ -1,4 +1,5 @@
 from uuid import UUID
+from decimal import Decimal
 
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -56,7 +57,6 @@ class QuestionService:
         exam = self._get_exam(class_id, exam_id, teacher)
         self._ensure_exam_is_draft(exam)
         question = self._get_question(class_id, exam_id, question_id, teacher)
-        self._ensure_not_confirmed(question)
 
         options_to_replace: list[QuestionOption] | None = None
         if question.type == QuestionType.MULTIPLE_CHOICE.value:
@@ -139,13 +139,12 @@ class QuestionService:
         exam = self._get_exam(class_id, exam_id, teacher)
         self._ensure_exam_is_draft(exam)
         question = self._get_question(class_id, exam_id, question_id, teacher)
-        self._ensure_not_confirmed(question)
 
         question.text = None
         question.correct_answer = None
         question.correct_answer_data = None
         question.expected_answer = None
-        question.points = 0
+        question.points = Decimal("0")
         question.grading_instructions = None
         question.rubric = None
         question.rubric_ai_suggested = None
@@ -168,7 +167,6 @@ class QuestionService:
         question = self._get_question(class_id, exam_id, question_id, teacher)
         if question.type != QuestionType.ESSAY.value:
             raise question_type_not_supported()
-        self._ensure_not_confirmed(question)
         self._ensure_ready_for_ai(question)
 
         ai_service = AIService(self.repository.db)
@@ -246,7 +244,7 @@ class QuestionService:
             errors.setdefault("text", []).append("Text is required.")
         if not question.expected_answer:
             errors.setdefault("expected_answer", []).append("Expected answer is required.")
-        if question.points <= 0:
+        if Decimal(question.points) <= Decimal("0"):
             errors.setdefault("points", []).append("Points must be greater than 0.")
         if errors:
             raise question_not_ready_for_ai(errors)
@@ -389,7 +387,7 @@ class QuestionService:
 
         if not question.text:
             errors.setdefault("text", []).append("Text is required.")
-        if question.points <= 0:
+        if Decimal(question.points) <= Decimal("0"):
             errors.setdefault("points", []).append("Points must be greater than 0.")
 
         if question.type == QuestionType.MULTIPLE_CHOICE.value:

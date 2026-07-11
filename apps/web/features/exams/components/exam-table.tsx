@@ -6,6 +6,7 @@ import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { formatDecimal } from "@/lib/decimal";
 import { routes } from "@/lib/routes";
 import type { Exam } from "@/types/exam";
 
@@ -14,6 +15,15 @@ type ExamTableProps = {
   exams: Exam[];
   onEdit: (exam: Exam) => void;
   onDelete: (exam: Exam) => void;
+};
+
+const examStatusLabels: Record<string, string> = {
+  draft: "پیش‌نویس",
+  finalized: "نهایی‌شده",
+  scheduled: "زمان‌بندی‌شده",
+  review_required: "نیازمند بازبینی",
+  approved: "تأییدشده",
+  published: "منتشرشده"
 };
 
 export function ExamTable({ classId, exams, onEdit, onDelete }: ExamTableProps) {
@@ -39,10 +49,10 @@ export function ExamTable({ classId, exams, onEdit, onDelete }: ExamTableProps) 
               </div>
             </TableCell>
             <TableCell>
-              <Badge>{exam.status}</Badge>
+              <Badge>{examStatusLabels[exam.status] ?? exam.status}</Badge>
             </TableCell>
             <TableCell>{exam.duration_minutes ? `${exam.duration_minutes} دقیقه` : "—"}</TableCell>
-            <TableCell>{exam.total_points}</TableCell>
+            <TableCell>{formatDecimal(exam.total_points)}</TableCell>
             <TableCell>
               <div className="flex flex-wrap gap-2">
                 <Link

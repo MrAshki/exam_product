@@ -47,7 +47,7 @@ def update_question(
     return success_response(data=_serialize_question(question, service))
 
 
-@router.post("/{question_id}/confirm")
+@router.post("/{question_id}/confirm", deprecated=True)
 def confirm_question(
     class_id: UUID,
     exam_id: UUID,

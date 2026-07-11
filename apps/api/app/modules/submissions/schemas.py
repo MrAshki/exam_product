@@ -71,7 +71,7 @@ class StudentQuestionRead(BaseModel):
     order_index: int
     type: str
     text: str
-    points: int
+    points: Decimal
     options: list[StudentQuestionOptionRead] = Field(default_factory=list)
 
 

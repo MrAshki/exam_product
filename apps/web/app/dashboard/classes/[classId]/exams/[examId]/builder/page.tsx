@@ -3,7 +3,7 @@
 import { ArrowRight } from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { PageHeader } from "@/components/common/page-header";
 import { Alert } from "@/components/ui/alert";
@@ -21,7 +21,10 @@ import {
   useBlueprint,
   useBuilderExam,
   useCreateBlueprint,
+  useExamReadiness,
+  useFinalizeExam,
   useQuestions,
+  useReopenExam,
   useUpdateBlueprint
 } from "@/features/question-builder/hooks";
 import { getErrorMessage } from "@/lib/errors";
@@ -34,6 +37,15 @@ function routeParam(value: string | string[] | undefined) {
   return Array.isArray(value) ? value[0] : value ?? "";
 }
 
+const examStatusLabels: Record<string, string> = {
+  draft: "پیش‌نویس",
+  finalized: "نهایی‌شده",
+  scheduled: "زمان‌بندی‌شده",
+  review_required: "نیازمند بازبینی",
+  approved: "تأییدشده",
+  published: "منتشرشده"
+};
+
 function BuilderContent() {
   const params = useParams();
   const classId = routeParam(params.classId);
@@ -41,9 +53,13 @@ function BuilderContent() {
   const exam = useBuilderExam(classId, examId);
   const blueprint = useBlueprint(classId, examId);
   const questions = useQuestions(classId, examId);
+  const readiness = useExamReadiness(classId, examId);
   const createBlueprint = useCreateBlueprint(classId, examId);
   const updateBlueprint = useUpdateBlueprint(classId, examId);
+  const finalizeExam = useFinalizeExam(classId, examId);
+  const reopenExam = useReopenExam(classId, examId);
   const [selectedQuestionId, setSelectedQuestionId] = useState<string | null>(null);
+  const pendingScrollQuestionId = useRef<string | null>(null);
   const [questionDetails, setQuestionDetails] = useState<Record<string, Question>>({});
 
   const mergedQuestions = useMemo(() => {
@@ -52,6 +68,7 @@ function BuilderContent() {
 
   const selectedQuestion = mergedQuestions.find((question) => question.id === selectedQuestionId) ?? mergedQuestions[0] ?? null;
   const blueprintMissing = blueprint.error instanceof ApiError && blueprint.error.status === 404;
+  const editable = exam.data?.status === "draft";
 
   function handleBlueprintSubmit(payload: BlueprintPayload) {
     const mutation = blueprint.data ? updateBlueprint : createBlueprint;
@@ -67,12 +84,42 @@ function BuilderContent() {
     }));
   }
 
+  function scrollToQuestionEditor(questionId: string) {
+    const target = document.getElementById(`question-editor-${questionId}`);
+    if (!target) {
+      return;
+    }
+    target.scrollIntoView({ behavior: "smooth", block: "start" });
+    target.focus({ preventScroll: true });
+  }
+
+  function selectAndScrollToQuestion(questionId?: string | null, orderIndex?: number | null) {
+    const targetId = questionId ?? mergedQuestions.find((question) => question.order_index === orderIndex)?.id;
+    if (!targetId) {
+      return;
+    }
+    if (selectedQuestion?.id === targetId) {
+      scrollToQuestionEditor(targetId);
+      return;
+    }
+    pendingScrollQuestionId.current = targetId;
+    setSelectedQuestionId(targetId);
+  }
+
+  useEffect(() => {
+    if (!pendingScrollQuestionId.current || selectedQuestion?.id !== pendingScrollQuestionId.current) {
+      return;
+    }
+    scrollToQuestionEditor(pendingScrollQuestionId.current);
+    pendingScrollQuestionId.current = null;
+  }, [selectedQuestion?.id]);
+
   return (
     <div className="space-y-6">
       <PageHeader
         title="سازنده آزمون"
         description={exam.data ? exam.data.title : "ساختار آزمون و سوال‌ها"}
-        action={<Badge>{exam.data?.status ?? "—"}</Badge>}
+        action={<Badge>{exam.data ? examStatusLabels[exam.data.status] ?? exam.data.status : "—"}</Badge>}
       />
       <div className="flex flex-wrap gap-2">
         <Link href={routes.classExams(classId)}>
@@ -93,21 +140,23 @@ function BuilderContent() {
         <div>
           <h2 className="text-lg font-semibold text-ink-900">ساخت/به‌روزرسانی ساختار آزمون</h2>
           <p className="mt-1 text-sm leading-6 text-ink-500">
-            با ساختار آزمون، backend جایگاه سوال‌ها را می‌سازد. اگر سوالی تایید شده باشد، backend اجازه تغییر ساختار را نمی‌دهد.
+            با ساختار آزمون، backend جایگاه سوال‌ها را می‌سازد. تا وقتی آزمون draft است می‌توانید ساختار و سوال‌ها را اصلاح کنید.
           </p>
         </div>
         {blueprint.isLoading ? <LoadingBlock label="در حال دریافت ساختار آزمون" /> : null}
         {blueprint.isError && !blueprintMissing ? <Alert variant="error">{getErrorMessage(blueprint.error)}</Alert> : null}
         {blueprintMissing ? <Alert>هنوز ساختاری برای این آزمون ساخته نشده است.</Alert> : null}
+        {!editable && exam.data ? <Alert>برای تغییر ساختار، قبل از زمان‌بندی آزمون را بازگشایی کنید.</Alert> : null}
         <BlueprintForm
           blueprint={blueprint.data}
           pending={createBlueprint.isPending || updateBlueprint.isPending}
           error={createBlueprint.error || updateBlueprint.error}
+          disabled={!editable}
           onSubmit={handleBlueprintSubmit}
         />
       </Card>
 
-      <QuestionProgress exam={exam.data} questions={mergedQuestions} />
+      <QuestionProgress exam={exam.data} questions={mergedQuestions} readiness={readiness.data} />
 
       {questions.isLoading ? <LoadingBlock label="در حال دریافت سوال‌ها" /> : null}
       {questions.isError ? <Alert variant="error">{getErrorMessage(questions.error)}</Alert> : null}
@@ -124,11 +173,25 @@ function BuilderContent() {
           classId={classId}
           examId={examId}
           question={selectedQuestion}
+          editable={editable}
           onQuestionHydrated={rememberQuestion}
         />
       </div>
 
-      <ExamReadinessPanel classId={classId} exam={exam.data} questions={mergedQuestions} />
+      <ExamReadinessPanel
+        classId={classId}
+        exam={exam.data}
+        readiness={readiness.data}
+        loading={readiness.isLoading}
+        error={readiness.error}
+        finalizePending={finalizeExam.isPending}
+        finalizeError={finalizeExam.error}
+        reopenPending={reopenExam.isPending}
+        reopenError={reopenExam.error}
+        onFinalize={() => finalizeExam.mutate()}
+        onReopen={() => reopenExam.mutate()}
+        onSelectQuestion={selectAndScrollToQuestion}
+      />
     </div>
   );
 }

@@ -1,4 +1,5 @@
 from typing import Any
+from decimal import Decimal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -29,7 +30,7 @@ class QuestionOptionRead(BaseModel):
 
 class QuestionUpdate(BaseModel):
     text: str | None = Field(default=None, max_length=20000)
-    points: int | None = Field(default=None, ge=0)
+    points: Decimal | None = Field(default=None, ge=0, max_digits=8, decimal_places=2)
     correct_answer: str | None = Field(default=None, max_length=5000)
     correct_answer_data: Any | None = None
     expected_answer: str | None = Field(default=None, max_length=20000)
@@ -58,7 +59,7 @@ class QuestionSlotRead(BaseModel):
     type: str
     status: str
     text: str | None
-    points: int
+    points: Decimal
     teacher_confirmed: bool
     needs_teacher_review: bool
 

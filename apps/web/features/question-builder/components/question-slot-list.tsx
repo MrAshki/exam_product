@@ -1,6 +1,7 @@
 "use client";
 
 import { Badge } from "@/components/ui/badge";
+import { formatDecimal } from "@/lib/decimal";
 import { cn } from "@/lib/formatters";
 import type { QuestionSlot } from "@/types/question";
 
@@ -9,6 +10,13 @@ const typeLabels: Record<string, string> = {
   short_answer: "کوتاه‌پاسخ",
   essay: "تشریحی",
   true_false: "درست/غلط"
+};
+
+const statusLabels: Record<string, string> = {
+  empty: "خالی",
+  draft: "پیش‌نویس",
+  extracted: "استخراج‌شده",
+  confirmed: "نهایی"
 };
 
 type QuestionSlotListProps = {
@@ -35,10 +43,10 @@ export function QuestionSlotList({ questions, selectedQuestionId, onSelect }: Qu
               <p className="text-sm font-semibold text-ink-900">سوال {question.order_index}</p>
               <p className="mt-1 text-xs text-ink-500">{typeLabels[question.type] || question.type}</p>
             </div>
-            <Badge>{question.teacher_confirmed ? "تایید شده" : question.status}</Badge>
+            <Badge>{statusLabels[question.status] ?? question.status}</Badge>
           </div>
           <p className="mt-2 line-clamp-2 text-xs leading-5 text-ink-500">{question.text || "هنوز متن سوال وارد نشده است."}</p>
-          <p className="mt-2 text-xs text-ink-500">نمره: {question.points}</p>
+          <p className="mt-2 text-xs text-ink-500">نمره: {formatDecimal(question.points)}</p>
         </button>
       ))}
       {questions.length === 0 ? (
