@@ -143,6 +143,26 @@ def _questions_url(context: dict) -> str:
     return f"/api/v1/classes/{context['class_id']}/exams/{context['exam_id']}/questions/"
 
 
+def _multiple_choice_payload(*, correct_answer: str | None, correct_option: str | None = None) -> dict:
+    correct = correct_option if correct_option is not None else correct_answer
+    return {
+        "text": "Which option is correct?",
+        "points": 4,
+        "correct_answer": correct_answer,
+        "correct_answer_data": {"selected_option": correct_answer} if correct_answer else None,
+        "options": [
+            {"option_key": "A", "option_text": "First option", "is_correct": correct == "A"},
+            {"option_key": "B", "option_text": "Second option", "is_correct": correct == "B"},
+            {"option_key": "C", "option_text": "Third option", "is_correct": correct == "C"},
+            {"option_key": "D", "option_text": "Fourth option", "is_correct": correct == "D"},
+        ],
+    }
+
+
+def _option_flags(question: dict) -> dict[str, bool]:
+    return {option["option_key"]: option["is_correct"] for option in question["options"]}
+
+
 def test_teacher_question_list_returns_full_saved_draft_fields_and_options() -> None:
     with SessionLocal() as db:
         context = _create_builder_context(db)
@@ -200,13 +220,13 @@ def test_teacher_question_list_returns_full_saved_draft_fields_and_options() -> 
     assert listed_mc["exam_id"] == str(context["exam_id"])
     assert listed_mc["text"] == "Which option is correct?"
     assert listed_mc["points"] == 4
-    assert listed_mc["correct_answer"] == "b"
-    assert listed_mc["correct_answer_data"] == {"option_key": "b"}
+    assert listed_mc["correct_answer"] == "B"
+    assert listed_mc["correct_answer_data"] == {"selected_option": "B"}
     assert listed_mc["options"] == [
-        {"id": listed_mc["options"][0]["id"], "option_key": "a", "option_text": "First option", "is_correct": False},
-        {"id": listed_mc["options"][1]["id"], "option_key": "b", "option_text": "Second option", "is_correct": True},
-        {"id": listed_mc["options"][2]["id"], "option_key": "c", "option_text": "Third option", "is_correct": False},
-        {"id": listed_mc["options"][3]["id"], "option_key": "d", "option_text": "Fourth option", "is_correct": False},
+        {"id": listed_mc["options"][0]["id"], "option_key": "A", "option_text": "First option", "is_correct": False},
+        {"id": listed_mc["options"][1]["id"], "option_key": "B", "option_text": "Second option", "is_correct": True},
+        {"id": listed_mc["options"][2]["id"], "option_key": "C", "option_text": "Third option", "is_correct": False},
+        {"id": listed_mc["options"][3]["id"], "option_key": "D", "option_text": "Fourth option", "is_correct": False},
     ]
 
     assert listed_essay["expected_answer"] == "A complete answer explains the central theme with evidence."
@@ -219,6 +239,159 @@ def test_teacher_question_list_returns_full_saved_draft_fields_and_options() -> 
     assert listed_essay["rubric_teacher_confirmed"] is True
 
 
+def test_multiple_choice_correct_answer_is_authoritative_and_normalized() -> None:
+    with SessionLocal() as db:
+        context = _create_builder_context(db)
+
+    multiple_choice_id = context["multiple_choice_id"]
+    response = client.put(
+        f"{_questions_url(context)}{multiple_choice_id}",
+        cookies=context["cookies"],
+        json={
+            "text": "Which option is correct?",
+            "points": 4,
+            "correct_answer": "c",
+            "correct_answer_data": {"option_key": "b"},
+            "options": [
+                {"option_key": "a", "option_text": "First option", "is_correct": False},
+                {"option_key": "b", "option_text": "Second option", "is_correct": True},
+                {"option_key": "c", "option_text": "Third option", "is_correct": False},
+                {"option_key": "d", "option_text": "Fourth option", "is_correct": False},
+            ],
+        },
+    )
+
+    assert response.status_code == 200
+    question = response.json()["data"]
+    assert question["correct_answer"] == "C"
+    assert question["correct_answer_data"] == {"selected_option": "C"}
+    assert [(option["option_key"], option["is_correct"]) for option in question["options"]] == [
+        ("A", False),
+        ("B", False),
+        ("C", True),
+        ("D", False),
+    ]
+
+
+def test_saving_lowercase_multiple_choice_correct_answer_stores_uppercase() -> None:
+    with SessionLocal() as db:
+        context = _create_builder_context(db)
+
+    response = client.put(
+        f"{_questions_url(context)}{context['multiple_choice_id']}",
+        cookies=context["cookies"],
+        json=_multiple_choice_payload(correct_answer="b"),
+    )
+
+    assert response.status_code == 200
+    question = response.json()["data"]
+    assert question["correct_answer"] == "B"
+    assert question["correct_answer_data"] == {"selected_option": "B"}
+    assert _option_flags(question) == {"A": False, "B": True, "C": False, "D": False}
+
+
+def test_changing_multiple_choice_correct_answer_recomputes_option_flags() -> None:
+    with SessionLocal() as db:
+        context = _create_builder_context(db)
+
+    first_response = client.put(
+        f"{_questions_url(context)}{context['multiple_choice_id']}",
+        cookies=context["cookies"],
+        json=_multiple_choice_payload(correct_answer="A"),
+    )
+    second_payload = _multiple_choice_payload(correct_answer="C")
+    second_payload["options"][0]["is_correct"] = True
+    second_payload["options"][2]["is_correct"] = False
+    second_response = client.put(
+        f"{_questions_url(context)}{context['multiple_choice_id']}",
+        cookies=context["cookies"],
+        json=second_payload,
+    )
+
+    assert first_response.status_code == 200
+    assert second_response.status_code == 200
+    question = second_response.json()["data"]
+    assert question["correct_answer"] == "C"
+    assert question["correct_answer_data"] == {"selected_option": "C"}
+    assert _option_flags(question) == {"A": False, "B": False, "C": True, "D": False}
+    assert sum(1 for is_correct in _option_flags(question).values() if is_correct) == 1
+
+
+def test_conflicting_option_flags_cannot_override_multiple_choice_correct_answer() -> None:
+    with SessionLocal() as db:
+        context = _create_builder_context(db)
+
+    payload = _multiple_choice_payload(correct_answer="B")
+    payload["options"][0]["is_correct"] = True
+    payload["options"][1]["is_correct"] = False
+    response = client.put(
+        f"{_questions_url(context)}{context['multiple_choice_id']}",
+        cookies=context["cookies"],
+        json=payload,
+    )
+
+    assert response.status_code == 200
+    question = response.json()["data"]
+    assert question["correct_answer"] == "B"
+    assert question["correct_answer_data"] == {"selected_option": "B"}
+    assert _option_flags(question) == {"A": False, "B": True, "C": False, "D": False}
+
+
+def test_duplicate_multiple_choice_option_keys_are_rejected_case_insensitively() -> None:
+    with SessionLocal() as db:
+        context = _create_builder_context(db)
+
+    payload = _multiple_choice_payload(correct_answer="A")
+    payload["options"][1]["option_key"] = "a"
+    response = client.put(
+        f"{_questions_url(context)}{context['multiple_choice_id']}",
+        cookies=context["cookies"],
+        json=payload,
+    )
+
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "INVALID_QUESTION_OPTIONS"
+
+
+def test_nonexistent_multiple_choice_correct_answer_is_rejected() -> None:
+    with SessionLocal() as db:
+        context = _create_builder_context(db)
+
+    response = client.put(
+        f"{_questions_url(context)}{context['multiple_choice_id']}",
+        cookies=context["cookies"],
+        json=_multiple_choice_payload(correct_answer="Z"),
+    )
+
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "QUESTION_VALIDATION_FAILED"
+
+
+def test_multiple_choice_draft_save_without_correct_answer_is_allowed() -> None:
+    with SessionLocal() as db:
+        context = _create_builder_context(db)
+
+    response = client.put(
+        f"{_questions_url(context)}{context['multiple_choice_id']}",
+        cookies=context["cookies"],
+        json=_multiple_choice_payload(correct_answer=None),
+    )
+
+    assert response.status_code == 200
+    question = response.json()["data"]
+    assert question["correct_answer"] is None
+    assert question["correct_answer_data"] is None
+    assert _option_flags(question) == {"A": False, "B": False, "C": False, "D": False}
+
+    refetch_response = client.get(_questions_url(context), cookies=context["cookies"])
+    refetched = {
+        question["id"]: question for question in refetch_response.json()["data"]
+    }[str(context["multiple_choice_id"])]
+    assert refetched["correct_answer"] is None
+    assert refetched["correct_answer_data"] is None
+    assert _option_flags(refetched) == {"A": False, "B": False, "C": False, "D": False}
+
+
 def test_teacher_question_list_can_include_correct_answers_but_public_start_does_not() -> None:
     with SessionLocal() as db:
         context = _create_builder_context(db, scheduled=True)
@@ -229,8 +402,8 @@ def test_teacher_question_list_can_include_correct_answers_but_public_start_does
         multiple_choice.teacher_confirmed = True
         multiple_choice.text = "Which option is correct?"
         multiple_choice.points = 4
-        multiple_choice.correct_answer = "b"
-        multiple_choice.correct_answer_data = {"option_key": "b"}
+        multiple_choice.correct_answer = "B"
+        multiple_choice.correct_answer_data = {"selected_option": "B"}
 
         essay.status = QuestionStatus.CONFIRMED.value
         essay.teacher_confirmed = True
@@ -251,7 +424,7 @@ def test_teacher_question_list_can_include_correct_answers_but_public_start_does
                     class_id=context["classroom"].id,
                     exam_id=context["exam"].id,
                     question_id=multiple_choice.id,
-                    option_key="b",
+                    option_key="B",
                     option_text="Second option",
                     is_correct=True,
                 ),

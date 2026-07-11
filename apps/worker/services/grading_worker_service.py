@@ -184,18 +184,32 @@ class DeterministicGradingWorkerService:
     @staticmethod
     def _score_objective_answer(question: Question, answer: Answer) -> Decimal:
         if question.type == QuestionType.MULTIPLE_CHOICE.value:
-            expected = DeterministicGradingWorkerService._normalize_choice(
-                (question.correct_answer_data or {}).get("selected_option")
-                if isinstance(question.correct_answer_data, dict)
-                else None
-            )
+            expected = DeterministicGradingWorkerService._normalize_choice(question.correct_answer)
             if expected is None:
-                expected = DeterministicGradingWorkerService._normalize_choice(question.correct_answer)
+                expected = DeterministicGradingWorkerService._normalize_choice(
+                    (question.correct_answer_data or {}).get("selected_option")
+                    if isinstance(question.correct_answer_data, dict)
+                    else None
+                )
+            if expected is None:
+                expected = DeterministicGradingWorkerService._normalize_choice(
+                    (question.correct_answer_data or {}).get("option_key")
+                    if isinstance(question.correct_answer_data, dict)
+                    else None
+                )
             selected = DeterministicGradingWorkerService._normalize_choice(
                 (answer.answer_data or {}).get("selected_option")
                 if isinstance(answer.answer_data, dict)
                 else None
             )
+            if selected is None:
+                selected = DeterministicGradingWorkerService._normalize_choice(
+                    (answer.answer_data or {}).get("option_key")
+                    if isinstance(answer.answer_data, dict)
+                    else None
+                )
+            if selected is None:
+                selected = DeterministicGradingWorkerService._normalize_choice(answer.student_answer)
             return Decimal(question.points) if selected is not None and selected == expected else Decimal("0")
 
         expected_bool = DeterministicGradingWorkerService._normalize_bool(

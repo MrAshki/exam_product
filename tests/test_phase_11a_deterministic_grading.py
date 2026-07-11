@@ -85,6 +85,7 @@ def _create_grading_context(db, *, include_subjective: bool = False) -> dict:
         type=QuestionType.MULTIPLE_CHOICE.value,
         status=QuestionStatus.CONFIRMED.value,
         text="What is 2 + 2?",
+        correct_answer="B",
         correct_answer_data={"selected_option": "B"},
         points=4,
         order_index=1,
@@ -336,6 +337,63 @@ def test_worker_grades_wrong_objective_answers_zero() -> None:
     assert {answer.auto_score for answer in answers} == {Decimal("0.00")}
     assert {answer.final_score for answer in answers} == {Decimal("0.00")}
     assert submission.total_score == Decimal("0.00")
+
+
+def test_worker_uses_question_correct_answer_before_conflicting_answer_data() -> None:
+    with SessionLocal() as db:
+        context = _create_grading_context(db)
+        context["mc_question"].correct_answer = "B"
+        context["mc_question"].correct_answer_data = {"selected_option": "A"}
+        db.add(context["mc_question"])
+        db.commit()
+        submission = _create_submission_with_answers(db, context, mc_selected="B", tf_value=True)
+        job = _create_job(db, context, submission)
+
+    _run_worker(job, context, submission)
+
+    with SessionLocal() as db:
+        mc_answer = db.scalar(select(Answer).where(Answer.question_id == context["mc_question_id"]))
+
+    assert mc_answer.auto_score == Decimal("4.00")
+    assert mc_answer.final_score == Decimal("4.00")
+
+
+def test_worker_falls_back_to_legacy_selected_option_when_correct_answer_is_missing() -> None:
+    with SessionLocal() as db:
+        context = _create_grading_context(db)
+        context["mc_question"].correct_answer = None
+        context["mc_question"].correct_answer_data = {"selected_option": "c"}
+        db.add(context["mc_question"])
+        db.commit()
+        submission = _create_submission_with_answers(db, context, mc_selected="c", tf_value=True)
+        job = _create_job(db, context, submission)
+
+    _run_worker(job, context, submission)
+
+    with SessionLocal() as db:
+        mc_answer = db.scalar(select(Answer).where(Answer.question_id == context["mc_question_id"]))
+
+    assert mc_answer.auto_score == Decimal("4.00")
+    assert mc_answer.final_score == Decimal("4.00")
+
+
+def test_worker_falls_back_to_legacy_option_key_when_correct_answer_is_missing() -> None:
+    with SessionLocal() as db:
+        context = _create_grading_context(db)
+        context["mc_question"].correct_answer = None
+        context["mc_question"].correct_answer_data = {"option_key": "d"}
+        db.add(context["mc_question"])
+        db.commit()
+        submission = _create_submission_with_answers(db, context, mc_selected="d", tf_value=True)
+        job = _create_job(db, context, submission)
+
+    _run_worker(job, context, submission)
+
+    with SessionLocal() as db:
+        mc_answer = db.scalar(select(Answer).where(Answer.question_id == context["mc_question_id"]))
+
+    assert mc_answer.auto_score == Decimal("4.00")
+    assert mc_answer.final_score == Decimal("4.00")
 
 
 def test_mixed_objective_subjective_submission_keeps_submitted_status() -> None:

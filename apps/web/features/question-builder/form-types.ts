@@ -1,4 +1,4 @@
-import type { FieldErrors, UseFormRegister, UseFormSetValue } from "react-hook-form";
+import type { Control, FieldErrors, UseFormRegister, UseFormSetValue } from "react-hook-form";
 
 export type QuestionFormValues = {
   text: string;
@@ -15,6 +15,7 @@ export type QuestionFormValues = {
 };
 
 export type QuestionFieldProps = {
+  control?: Control<QuestionFormValues>;
   register: UseFormRegister<QuestionFormValues>;
   errors: FieldErrors<QuestionFormValues>;
   setValue: UseFormSetValue<QuestionFormValues>;

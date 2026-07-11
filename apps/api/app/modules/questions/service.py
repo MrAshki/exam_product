@@ -24,6 +24,9 @@ from app.modules.questions.repository import QuestionRepository
 from app.modules.questions.schemas import QuestionOptionWrite, QuestionUpdate
 
 
+MULTIPLE_CHOICE_OPTION_KEYS = {"A", "B", "C", "D"}
+
+
 class QuestionService:
     def __init__(self, db: Session) -> None:
         self.repository = QuestionRepository(db)
@@ -57,9 +60,11 @@ class QuestionService:
 
         options_to_replace: list[QuestionOption] | None = None
         if question.type == QuestionType.MULTIPLE_CHOICE.value:
+            correct_answer = self._resolve_multiple_choice_correct_answer(question, payload)
             if payload.options is not None:
-                options_to_replace = self._build_multiple_choice_options(question, payload)
+                options_to_replace = self._build_multiple_choice_options(question, payload, correct_answer)
             self._apply_common_fields(question, payload)
+            self._sync_multiple_choice_answer(question, correct_answer)
             self._validate_multiple_choice_answer_matches_options(
                 question,
                 options_to_replace
@@ -263,19 +268,25 @@ class QuestionService:
         self,
         question: Question,
         payload: QuestionUpdate,
+        correct_answer: str | None,
     ) -> list[QuestionOption]:
         if payload.options is None:
             return []
         self._validate_option_payload(payload.options)
+        normalized_option_keys = {self._normalize_multiple_choice_key(option.option_key) for option in payload.options}
+        if correct_answer is not None and correct_answer not in normalized_option_keys:
+            raise invalid_question_options(
+                {"correct_answer": ["Correct answer must match one of the option keys."]}
+            )
         return [
             QuestionOption(
                 teacher_id=question.teacher_id,
                 class_id=question.class_id,
                 exam_id=question.exam_id,
                 question_id=question.id,
-                option_key=option.option_key.strip(),
+                option_key=self._normalize_multiple_choice_key(option.option_key) or option.option_key.strip(),
                 option_text=option.option_text.strip(),
-                is_correct=option.is_correct,
+                is_correct=self._normalize_multiple_choice_key(option.option_key) == correct_answer,
             )
             for option in payload.options
         ]
@@ -285,14 +296,60 @@ class QuestionService:
         errors: dict[str, list[str]] = {}
         if len(options) < 2:
             errors.setdefault("options", []).append("Multiple choice requires at least 2 options.")
-        normalized_keys = [option.option_key.strip().lower() for option in options]
+        normalized_keys = [QuestionService._normalize_multiple_choice_key(option.option_key) for option in options]
+        if any(key is None for key in normalized_keys):
+            errors.setdefault("options", []).append("Option keys must be A, B, C, or D.")
         if len(normalized_keys) != len(set(normalized_keys)):
             errors.setdefault("options", []).append("Option keys must be unique.")
-        correct_count = sum(1 for option in options if option.is_correct)
-        if correct_count != 1:
-            errors.setdefault("options", []).append("Exactly one option must be correct.")
         if errors:
             raise invalid_question_options(errors)
+
+    @staticmethod
+    def _normalize_multiple_choice_key(value: str | None) -> str | None:
+        if value is None:
+            return None
+        normalized = value.strip().upper()
+        if normalized in MULTIPLE_CHOICE_OPTION_KEYS:
+            return normalized
+        return None
+
+    def _resolve_multiple_choice_correct_answer(
+        self,
+        question: Question,
+        payload: QuestionUpdate,
+    ) -> str | None:
+        update_data = payload.model_dump(exclude_unset=True)
+        if "correct_answer" in update_data:
+            candidate = update_data["correct_answer"]
+        elif isinstance(update_data.get("correct_answer_data"), dict):
+            answer_data = update_data["correct_answer_data"]
+            candidate = answer_data.get("selected_option") or answer_data.get("option_key")
+        else:
+            candidate = question.correct_answer
+        if candidate is None and payload.options is None:
+            existing_correct_options = [
+                option
+                for option in self.repository.list_options_for_question(
+                    question_id=question.id,
+                    exam_id=question.exam_id,
+                    class_id=question.class_id,
+                    teacher_id=question.teacher_id,
+                )
+                if option.is_correct
+            ]
+            if len(existing_correct_options) == 1:
+                candidate = existing_correct_options[0].option_key
+            elif len(existing_correct_options) > 1:
+                raise invalid_question_options({"options": ["Exactly one option must be correct."]})
+        normalized = self._normalize_multiple_choice_key(candidate)
+        if candidate is not None and normalized is None:
+            raise question_validation_failed({"correct_answer": ["Correct answer must be A, B, C, or D."]})
+        return normalized
+
+    @staticmethod
+    def _sync_multiple_choice_answer(question: Question, correct_answer: str | None) -> None:
+        question.correct_answer = correct_answer
+        question.correct_answer_data = {"selected_option": correct_answer} if correct_answer else None
 
     @staticmethod
     def _normalize_true_false(question: Question) -> None:
@@ -315,10 +372,10 @@ class QuestionService:
         if not question.correct_answer or not options:
             return
         correct_options = [option for option in options if option.is_correct]
-        if not correct_options:
-            return
-        correct_key = correct_options[0].option_key.strip().lower()
-        if question.correct_answer.strip().lower() != correct_key:
+        if len(correct_options) != 1:
+            raise invalid_question_options({"options": ["Exactly one option must be correct."]})
+        correct_key = QuestionService._normalize_multiple_choice_key(correct_options[0].option_key)
+        if question.correct_answer != correct_key:
             raise invalid_question_options(
                 {"correct_answer": ["Correct answer must match the correct option key."]}
             )
@@ -369,5 +426,7 @@ class QuestionService:
             errors.setdefault("options", []).append("Exactly one option must be correct.")
         if not question.correct_answer:
             errors.setdefault("correct_answer", []).append("Correct answer is required.")
-        elif correct_options and question.correct_answer.strip().lower() != correct_options[0].option_key.strip().lower():
+        elif correct_options and question.correct_answer != QuestionService._normalize_multiple_choice_key(
+            correct_options[0].option_key
+        ):
             errors.setdefault("correct_answer", []).append("Correct answer must match the correct option key.")

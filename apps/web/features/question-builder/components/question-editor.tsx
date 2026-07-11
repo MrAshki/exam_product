@@ -58,9 +58,41 @@ const typeLabels: Record<string, string> = {
   true_false: "درست/غلط"
 };
 
+const MULTIPLE_CHOICE_KEYS = ["A", "B", "C", "D"] as const;
+type MultipleChoiceKey = (typeof MULTIPLE_CHOICE_KEYS)[number];
+
+function normalizeMultipleChoiceKey(value: unknown): MultipleChoiceKey | "" {
+  const normalized = String(value ?? "")
+    .trim()
+    .toUpperCase();
+  return MULTIPLE_CHOICE_KEYS.includes(normalized as MultipleChoiceKey) ? (normalized as MultipleChoiceKey) : "";
+}
+
 function optionValue(question: Question | QuestionSlot | null | undefined, key: string) {
   const detailed = question as Question | undefined;
-  return detailed?.options?.find((option) => option.option_key.toLowerCase() === key)?.option_text ?? "";
+  return (
+    detailed?.options?.find((option) => normalizeMultipleChoiceKey(option.option_key) === normalizeMultipleChoiceKey(key))
+      ?.option_text ?? ""
+  );
+}
+
+function correctAnswerValue(question: Question | QuestionSlot | null | undefined) {
+  const detailed = question as Question | undefined;
+  const directAnswer = normalizeMultipleChoiceKey(detailed?.correct_answer);
+  if (directAnswer) {
+    return directAnswer;
+  }
+
+  if (detailed?.correct_answer_data && typeof detailed.correct_answer_data === "object") {
+    const answerData = detailed.correct_answer_data as Record<string, unknown>;
+    const selectedOption = normalizeMultipleChoiceKey(answerData.selected_option ?? answerData.option_key);
+    if (selectedOption) {
+      return selectedOption;
+    }
+  }
+
+  const correctOption = detailed?.options?.find((option) => option.is_correct);
+  return normalizeMultipleChoiceKey(correctOption?.option_key);
 }
 
 function stringifyRubric(value: unknown) {
@@ -94,11 +126,11 @@ function optionalText(value?: string) {
 }
 
 function buildOptions(values: QuestionFormOutput): QuestionOption[] {
-  const correct = (values.correct_answer || "").toLowerCase();
-  return (["a", "b", "c", "d"] as const)
+  const correct = normalizeMultipleChoiceKey(values.correct_answer);
+  return MULTIPLE_CHOICE_KEYS
     .map((key) => ({
       option_key: key,
-      option_text: values[`option_${key}`]?.trim() ?? "",
+      option_text: values[`option_${key.toLowerCase() as "a" | "b" | "c" | "d"}`]?.trim() ?? "",
       is_correct: correct === key
     }))
     .filter((option) => option.option_text);
@@ -112,11 +144,11 @@ function buildPayload(question: Question | QuestionSlot, values: QuestionFormOut
   };
 
   if (question.type === "multiple_choice") {
-    const correct = (values.correct_answer || "").toLowerCase();
+    const correct = normalizeMultipleChoiceKey(values.correct_answer);
     return {
       ...common,
       correct_answer: correct || null,
-      correct_answer_data: correct ? { option_key: correct } : null,
+      correct_answer_data: correct ? { selected_option: correct } : null,
       options: buildOptions(values)
     };
   }
@@ -160,7 +192,8 @@ export function QuestionEditor({ classId, examId, question, onQuestionHydrated }
       points: question?.points ? String(question.points) : "",
       grading_instructions: (question as Question | undefined)?.grading_instructions ?? "",
       expected_answer: (question as Question | undefined)?.expected_answer ?? "",
-      correct_answer: (question as Question | undefined)?.correct_answer ?? "",
+      correct_answer:
+        question?.type === "multiple_choice" ? correctAnswerValue(question) : (question as Question | undefined)?.correct_answer ?? "",
       rubric: stringifyRubric((question as Question | undefined)?.rubric),
       rubric_teacher_confirmed: (question as Question | undefined)?.rubric_teacher_confirmed ?? false,
       option_a: optionValue(question, "a"),
@@ -232,7 +265,14 @@ export function QuestionEditor({ classId, examId, question, onQuestionHydrated }
       return null;
     }
     if (currentQuestion.type === "multiple_choice") {
-      return <MultipleChoiceFields register={form.register} errors={form.formState.errors} setValue={form.setValue} />;
+      return (
+        <MultipleChoiceFields
+          control={form.control}
+          register={form.register}
+          errors={form.formState.errors}
+          setValue={form.setValue}
+        />
+      );
     }
     if (currentQuestion.type === "true_false") {
       return <TrueFalseFields register={form.register} errors={form.formState.errors} setValue={form.setValue} />;
