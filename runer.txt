@@ -1,0 +1,29 @@
+Start complete project:
+.\run-all.cmd
+
+Start without worker:
+.\run-all.cmd -NoWorker
+
+Clean Next cache and start:
+.\run-all.cmd -Clean
+
+Start without opening browser:
+.\run-all.cmd -NoBrowser
+
+Stop app processes:
+.\stop-all.cmd
+
+Stop app processes and Docker services:
+.\stop-all.cmd -StopInfrastructure
+
+Frontend:
+http://localhost:3000
+
+API:
+http://localhost:8081
+
+Swagger:
+http://localhost:8081/docs
+
+Always use localhost in browser-facing URLs.
+Do not mix localhost and 127.0.0.1.
