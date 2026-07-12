@@ -2,7 +2,11 @@
 param(
     [switch]$Clean,
     [switch]$NoWorker,
-    [switch]$NoBrowser
+    [switch]$NoBrowser,
+    [switch]$UseConfiguredAI,
+    [switch]$UseConfiguredEmail,
+    [switch]$UseConfiguredProviders,
+    [switch]$CheckConfiguredProviders
 )
 
 $ErrorActionPreference = "Stop"
@@ -19,6 +23,10 @@ $BrowserApiBaseUrl = "http://localhost:8081/api/v1"
 $DockerTimeoutSeconds = 150
 $StartupTimeoutSeconds = 90
 $ApiBaseConflictDetected = $false
+$AiEnvKeys = @("AI_PROVIDER", "AI_MODEL", "GEMINI_API_KEY", "AI_TIMEOUT_SECONDS")
+$EmailEnvKeys = @("EMAIL_PROVIDER", "SMTP_HOST", "SMTP_PORT", "SMTP_USERNAME", "SMTP_PASSWORD", "SMTP_FROM_EMAIL", "SMTP_FROM_NAME", "SMTP_USE_TLS")
+$UseRealAI = [bool]($UseConfiguredAI -or $UseConfiguredProviders)
+$UseRealEmail = [bool]($UseConfiguredEmail -or $UseConfiguredProviders)
 
 Set-Location -LiteralPath $RepoRoot
 
@@ -31,6 +39,15 @@ function Fail {
     param([string]$Message)
     Write-Host "[exam-dev] ERROR: $Message" -ForegroundColor Red
     exit 1
+}
+
+function Assert-ProviderModeAllowed {
+    if ($CheckConfiguredProviders -and ($Clean -or $NoWorker -or $NoBrowser -or $UseConfiguredAI -or $UseConfiguredEmail -or $UseConfiguredProviders)) {
+        Write-Step "Check-only mode ignores startup flags and validates the configured providers from the private root .env."
+    }
+    if (($UseRealAI -or $UseRealEmail) -and $NoWorker) {
+        Fail "Configured provider modes require the worker. Remove -NoWorker or use the default mock mode."
+    }
 }
 
 function Test-CommandExists {
@@ -263,6 +280,204 @@ function Assert-Prerequisites {
     }
 }
 
+function Assert-ConfigPrerequisites {
+    Write-Step "Checking configuration inspection prerequisites."
+    if (-not (Test-CommandExists "powershell.exe")) {
+        Fail "Windows PowerShell was not found."
+    }
+    if (-not (Test-Path -LiteralPath $PythonPath)) {
+        Fail ".venv is missing. Create it from the repo root and install API requirements before validating configured providers."
+    }
+    foreach ($requiredPath in @("apps\api", ".env", ".gitignore")) {
+        if (-not (Test-Path -LiteralPath (Join-Path $RepoRoot $requiredPath))) {
+            Fail "Required path is missing: $requiredPath"
+        }
+    }
+    git check-ignore -q .env
+    if ($LASTEXITCODE -ne 0) {
+        Fail "Root .env is not ignored by Git. Refusing configured-provider validation."
+    }
+}
+
+function Get-ProviderEnvironmentBody {
+    param([bool]$RealAI, [bool]$RealEmail)
+    $lines = @()
+    if ($RealAI) {
+        foreach ($name in $AiEnvKeys) {
+            $lines += "Remove-Item Env:$name -ErrorAction SilentlyContinue"
+        }
+    } else {
+        $lines += "`$env:AI_PROVIDER = 'mock'"
+    }
+
+    if ($RealEmail) {
+        foreach ($name in $EmailEnvKeys) {
+            $lines += "Remove-Item Env:$name -ErrorAction SilentlyContinue"
+        }
+    } else {
+        $lines += "`$env:EMAIL_PROVIDER = 'mock'"
+    }
+    return ($lines -join "`r`n")
+}
+
+function Invoke-WithProviderEnvironment {
+    param(
+        [bool]$RealAI,
+        [bool]$RealEmail,
+        [scriptblock]$Script
+    )
+    $previous = @{}
+    foreach ($name in ($AiEnvKeys + $EmailEnvKeys | Sort-Object -Unique)) {
+        $previous[$name] = [Environment]::GetEnvironmentVariable($name, "Process")
+    }
+    try {
+        if ($RealAI) {
+            foreach ($name in $AiEnvKeys) {
+                Remove-Item "Env:$name" -ErrorAction SilentlyContinue
+            }
+        } else {
+            $env:AI_PROVIDER = "mock"
+        }
+        if ($RealEmail) {
+            foreach ($name in $EmailEnvKeys) {
+                Remove-Item "Env:$name" -ErrorAction SilentlyContinue
+            }
+        } else {
+            $env:EMAIL_PROVIDER = "mock"
+        }
+        & $Script
+    } finally {
+        foreach ($name in $previous.Keys) {
+            if ($null -eq $previous[$name]) {
+                Remove-Item "Env:$name" -ErrorAction SilentlyContinue
+            } else {
+                [Environment]::SetEnvironmentVariable($name, [string]$previous[$name], "Process")
+            }
+        }
+    }
+}
+
+function Test-ConfiguredProviders {
+    param([bool]$ValidateAI, [bool]$ValidateEmail)
+    Assert-ConfigPrerequisites
+    Write-Step "Validating configured providers without contacting Gemini or SMTP."
+    Invoke-WithProviderEnvironment -RealAI $true -RealEmail $true -Script {
+        $env:RUNNER_VALIDATE_AI = if ($ValidateAI) { "true" } else { "false" }
+        $env:RUNNER_VALIDATE_EMAIL = if ($ValidateEmail) { "true" } else { "false" }
+        Push-Location (Join-Path $RepoRoot "apps\api")
+        try {
+            $code = @'
+from urllib.parse import urlparse
+
+from app.core.config import settings
+
+validate_ai = __import__("os").environ.get("RUNNER_VALIDATE_AI") == "true"
+validate_email = __import__("os").environ.get("RUNNER_VALIDATE_EMAIL") == "true"
+
+SUPPORTED_AI = {"mock", "gemini"}
+SUPPORTED_EMAIL = {"mock", "smtp", "gmail"}
+
+def require(condition, name):
+    if not condition:
+        raise SystemExit(f"Configured provider validation failed: {name}")
+
+def host_port(value):
+    parsed = urlparse(value)
+    return parsed.hostname, parsed.port
+
+db_host, db_port = host_port(settings.sqlalchemy_database_uri)
+redis_host, redis_port = host_port(settings.redis_dsn)
+ai_provider = (settings.AI_PROVIDER or "").strip().lower()
+email_provider = (settings.EMAIL_PROVIDER or "").strip().lower()
+
+if validate_ai:
+    require(bool(ai_provider), "AI_PROVIDER is required")
+    require(ai_provider != "mock", "AI_PROVIDER must not be mock for configured AI mode")
+    require(ai_provider in SUPPORTED_AI, "AI_PROVIDER is unsupported")
+    if ai_provider == "gemini":
+        require(bool(settings.GEMINI_API_KEY), "GEMINI_API_KEY is required for AI_PROVIDER=gemini")
+    require(bool(settings.AI_MODEL), "AI_MODEL is required")
+    require(int(settings.AI_TIMEOUT_SECONDS) > 0, "AI_TIMEOUT_SECONDS must be positive")
+
+if validate_email:
+    require(bool(email_provider), "EMAIL_PROVIDER is required")
+    require(email_provider != "mock", "EMAIL_PROVIDER must not be mock for configured email mode")
+    require(email_provider in SUPPORTED_EMAIL, "EMAIL_PROVIDER is unsupported")
+    if email_provider in {"smtp", "gmail"}:
+        require(bool(settings.SMTP_HOST), "SMTP_HOST is required")
+        require(int(settings.SMTP_PORT) > 0, "SMTP_PORT must be positive")
+        require(bool(settings.SMTP_USERNAME), "SMTP_USERNAME is required")
+        require(bool(settings.SMTP_PASSWORD), "SMTP_PASSWORD is required")
+        require(bool(settings.SMTP_FROM_EMAIL), "SMTP_FROM_EMAIL is required")
+
+require(bool(db_host), "DATABASE_HOST is required")
+require(bool(db_port), "DATABASE_PORT is required")
+require(bool(redis_host), "REDIS_HOST is required")
+require(bool(redis_port), "REDIS_PORT is required")
+if db_host in {"localhost", "127.0.0.1"}:
+    require(db_port == 55432, "DATABASE_PORT must be 55432 for local configured-provider runs")
+if redis_host in {"localhost", "127.0.0.1"}:
+    require(redis_port == 16379, "REDIS_PORT must be 16379 for local configured-provider runs")
+
+print(f"AI_PROVIDER={settings.AI_PROVIDER}")
+print(f"AI_MODEL={settings.AI_MODEL}")
+print(f"GEMINI_API_KEY_CONFIGURED={bool(settings.GEMINI_API_KEY)}")
+print(f"EMAIL_PROVIDER={settings.EMAIL_PROVIDER}")
+print(f"SMTP_HOST={settings.SMTP_HOST}")
+print(f"SMTP_PORT={settings.SMTP_PORT}")
+print(f"SMTP_USERNAME={settings.SMTP_USERNAME}")
+print(f"SMTP_PASSWORD_CONFIGURED={bool(settings.SMTP_PASSWORD)}")
+print(f"SMTP_FROM_EMAIL={settings.SMTP_FROM_EMAIL}")
+print(f"SMTP_FROM_NAME={settings.SMTP_FROM_NAME}")
+print(f"SMTP_USE_TLS={settings.SMTP_USE_TLS}")
+print(f"DATABASE_HOST={db_host}")
+print(f"DATABASE_PORT={db_port}")
+print(f"REDIS_HOST={redis_host}")
+print(f"REDIS_PORT={redis_port}")
+'@
+            $code | & $PythonPath -
+            if ($LASTEXITCODE -ne 0) {
+                Fail "Configured provider validation failed."
+            }
+        } finally {
+            Pop-Location
+            Remove-Item Env:RUNNER_VALIDATE_AI -ErrorAction SilentlyContinue
+            Remove-Item Env:RUNNER_VALIDATE_EMAIL -ErrorAction SilentlyContinue
+        }
+    }
+}
+
+function Write-ProviderSummary {
+    if ($UseRealAI -or $UseRealEmail) {
+        Test-ConfiguredProviders -ValidateAI:$UseRealAI -ValidateEmail:$UseRealEmail
+    }
+    Invoke-WithProviderEnvironment -RealAI $UseRealAI -RealEmail $UseRealEmail -Script {
+        Push-Location (Join-Path $RepoRoot "apps\api")
+        try {
+            $code = @'
+from app.core.config import settings
+
+ai_mode = "configured" if settings.AI_PROVIDER.lower().strip() != "mock" else "mock"
+email_mode = "configured" if settings.EMAIL_PROVIDER.lower().strip() != "mock" else "mock"
+ai_detail = f"provider={settings.AI_PROVIDER}, model={settings.AI_MODEL}" if ai_mode == "configured" else "provider=mock"
+email_detail = (
+    f"provider={settings.EMAIL_PROVIDER}, host={settings.SMTP_HOST}, port={settings.SMTP_PORT}"
+    if email_mode == "configured"
+    else "provider=mock"
+)
+print(f"AI mode: {ai_mode} ({ai_detail})")
+print(f"Email mode: {email_mode} ({email_detail})")
+'@
+            $code | & $PythonPath -
+            if ($LASTEXITCODE -ne 0) {
+                Fail "Provider summary failed."
+            }
+        } finally {
+            Pop-Location
+        }
+    }
+}
+
 function Test-DockerReady {
     docker info *> $null
     return ($LASTEXITCODE -eq 0)
@@ -403,7 +618,15 @@ function Stop-StartedProcesses {
     }
 }
 
+Assert-ProviderModeAllowed
+
+if ($CheckConfiguredProviders) {
+    Test-ConfiguredProviders -ValidateAI:$true -ValidateEmail:$true
+    exit 0
+}
+
 Assert-Prerequisites
+Write-ProviderSummary
 Inspect-ApiBaseOverrides
 
 $stateBefore = Get-State
@@ -440,6 +663,10 @@ $runState = @{
     repositoryPath = $RepoRoot
     ports = @{ api = 8081; web = 3000 }
     urls = @{ frontend = $FrontendUrl; api = $ApiUrl; swagger = $SwaggerUrl }
+    providers = @{
+        ai = if ($UseRealAI) { "configured" } else { "mock" }
+        email = if ($UseRealEmail) { "configured" } else { "mock" }
+    }
     apiTerminalPid = $null
     webTerminalPid = $null
     workerTerminalPid = $null
@@ -448,9 +675,9 @@ $startedPids = @()
 
 try {
     Write-Step "Starting API in a visible terminal."
+    $providerEnvBody = Get-ProviderEnvironmentBody -RealAI $UseRealAI -RealEmail $UseRealEmail
     $apiBody = @"
-`$env:AI_PROVIDER = 'mock'
-`$env:EMAIL_PROVIDER = 'mock'
+$providerEnvBody
 `$env:FRONTEND_BASE_URL = '$FrontendUrl'
 `$env:BACKEND_CORS_ORIGINS = '$FrontendUrl'
 & '$((Escape-PSLiteral -Value $PythonPath))' -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8081
@@ -465,8 +692,7 @@ try {
     if (-not $NoWorker) {
         Write-Step "Starting Celery worker in a visible terminal."
         $workerBody = @"
-`$env:AI_PROVIDER = 'mock'
-`$env:EMAIL_PROVIDER = 'mock'
+$providerEnvBody
 & '$((Escape-PSLiteral -Value $PythonPath))' -m celery -A apps.worker.worker:celery_app worker --loglevel=INFO --pool=solo
 "@
         $workerProcess = Start-DevTerminal -Title "Exam Worker" -WorkingDirectory $RepoRoot -Body $workerBody
