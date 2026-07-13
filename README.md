@@ -96,17 +96,16 @@
 
 ## معماری
 
-```mermaid
-flowchart LR
-    U[Teacher / Student] --> W[Next.js Web App]
-    W --> A[FastAPI REST API]
-    A --> P[(PostgreSQL)]
-    A --> R[(Redis)]
-    R --> C[Celery Worker]
-    C --> P
-    C --> AI[Mock / Gemini]
-    C --> E[Mock / SMTP / Gmail]
-```
+| مبدأ | مقصد | نقش ارتباط |
+|---|---|---|
+| Teacher / Student | Next.js Web App | استفاده از پنل معلم و صفحه آزمون دانش‌آموز |
+| Next.js Web App | FastAPI REST API | ارسال درخواست‌ها، دریافت داده‌ها و مدیریت نشست کاربر |
+| FastAPI REST API | PostgreSQL | ذخیره کاربران، کلاس‌ها، آزمون‌ها، پاسخ‌ها، نمره‌ها و اعتراض‌ها |
+| FastAPI REST API | Redis | صف‌گذاری کارهای پس‌زمینه و نگهداری وضعیت Taskها |
+| Redis | Celery Worker | اجرای کارهای زمان‌بر خارج از مسیر اصلی درخواست |
+| Celery Worker | PostgreSQL | ثبت خروجی تصحیح، نتیجه نهایی، رتبه‌بندی و لاگ‌ها |
+| Celery Worker | Mock / Gemini | ارزیابی هوشمند پاسخ‌های تشریحی |
+| Celery Worker | Mock / SMTP / Gmail | ارسال دعوت‌نامه، لینک آزمون و اعلان‌های نتیجه |
 
 معماری پروژه به‌صورت Monorepo است. عملیات سریع و هم‌زمان توسط API انجام می‌شوند و کارهای زمان‌بر مانند تصحیح هوشمند، ارسال ایمیل و به‌روزرسانی رتبه‌بندی به Worker سپرده می‌شوند.
 
