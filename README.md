@@ -1,87 +1,364 @@
-# Class-Centric AI Exam Platform
+<div align="center">
 
-Initial monorepo skeleton for Phase 0 and Phase 1.
+# سامانه آزمون هوشمند کلاس‌محور
 
-This phase includes only the repository layout, FastAPI backend foundation,
-PostgreSQL connection setup, Redis infrastructure, SQLAlchemy base model mixin,
-Alembic migration setup, standard API response shapes, and a health endpoint.
+### Class-Centric AI Exam Platform
 
-It intentionally does not include auth, classes, students, exams, grading, AI
-providers, queues, emails, or frontend pages.
+سامانه‌ای یکپارچه برای ساخت، برگزاری، تصحیح و بازبینی آزمون با کمک هوش مصنوعی
 
-## Structure
+[![Project Status](https://img.shields.io/badge/status-in%20development-F59E0B?style=for-the-badge)](#وضعیت-پروژه)
+[![API](https://img.shields.io/badge/API-FastAPI-009688?style=for-the-badge&logo=fastapi&logoColor=white)](#فناوریهای-استفادهشده)
+[![Web](https://img.shields.io/badge/Web-Next.js-000000?style=for-the-badge&logo=nextdotjs&logoColor=white)](#فناوریهای-استفادهشده)
+[![Database](https://img.shields.io/badge/Database-PostgreSQL-4169E1?style=for-the-badge&logo=postgresql&logoColor=white)](#فناوریهای-استفادهشده)
 
-```text
-apps/
-  api/
-    app/
-      core/
-      db/
-    alembic/
-  web/
-  worker/
-infra/
-  docker/
-  nginx/
-  postgres/
-  redis/
-docker-compose.yml
+</div>
+
+> [!IMPORTANT]
+> این پروژه در حال توسعه فعال است و هنوز برای استفاده در محیط Production آماده نیست. ساختار داده‌ها، APIها و رابط کاربری ممکن است در نسخه‌های بعدی تغییر کنند.
+
+## فهرست مطالب
+
+- [درباره پروژه](#درباره-پروژه)
+- [وضعیت پروژه](#وضعیت-پروژه)
+- [قابلیت‌ها](#قابلیتها)
+- [جریان کار سامانه](#جریان-کار-سامانه)
+- [معماری](#معماری)
+- [فناوری‌های استفاده‌شده](#فناوریهای-استفادهشده)
+- [ساختار پروژه](#ساختار-پروژه)
+- [راه‌اندازی سریع](#راهاندازی-سریع)
+- [اجرای دستی سرویس‌ها](#اجرای-دستی-سرویسها)
+- [تنظیم سرویس‌های خارجی](#تنظیم-سرویسهای-خارجی)
+- [آدرس سرویس‌ها](#آدرس-سرویسها)
+- [تست و کنترل کیفیت](#تست-و-کنترل-کیفیت)
+- [نقشه راه](#نقشه-راه)
+- [امنیت](#امنیت)
+- [مشارکت در توسعه](#مشارکت-در-توسعه)
+
+## درباره پروژه
+
+این پروژه یک پلتفرم آزمون آنلاین با محوریت کلاس است. معلم می‌تواند کلاس و دانش‌آموزان را مدیریت کند، آزمون بسازد، آن را زمان‌بندی کند و لینک اختصاصی هر دانش‌آموز را ارسال کند. پاسخ‌های عینی به‌صورت قطعی و پاسخ‌های تشریحی با کمک هوش مصنوعی ارزیابی می‌شوند؛ با این حال تصمیم نهایی همچنان در اختیار معلم است.
+
+هدف پروژه، پوشش‌دادن کل چرخه آزمون در یک محصول واحد است:
+
+**ساخت آزمون ← دعوت دانش‌آموز ← برگزاری ← تصحیح ترکیبی ← بازبینی معلم ← انتشار نتیجه ← رسیدگی به اعتراض**
+
+## وضعیت پروژه
+
+| مورد | وضعیت فعلی |
+|---|---|
+| مرحله توسعه | 🚧 توسعه فعال |
+| نسخه فعلی API | `0.1.0` |
+| جریان اصلی آزمون | پیاده‌سازی شده و در حال تکمیل و پایدارسازی |
+| رابط کاربری | پیاده‌سازی شده و در حال بهبود تجربه کاربری |
+| تصحیح هوشمند | Mock و Google Gemini |
+| ارسال ایمیل | Mock، SMTP و Gmail |
+| آمادگی Production | هنوز آماده نیست |
+
+در وضعیت فعلی، جریان اصلی از ثبت‌نام معلم تا انتشار نتیجه و رسیدگی به اعتراض وجود دارد. تمرکز توسعه بعدی روی پایدارسازی، افزایش پوشش تست، بهبود رابط کاربری، امنیت عملیاتی و آماده‌سازی استقرار خواهد بود.
+
+## قابلیت‌ها
+
+| حوزه | قابلیت‌های موجود | وضعیت |
+|---|---|:---:|
+| احراز هویت | ثبت‌نام، ورود، خروج و نشست مبتنی بر Cookie | ✅ |
+| مدیریت کلاس | ایجاد، مشاهده، ویرایش و حذف کلاس | ✅ |
+| مدیریت دانش‌آموز | افزودن و مدیریت دانش‌آموزان هر کلاس | ✅ |
+| طراحی آزمون | تعریف عنوان، توضیحات، نمره کل و تنظیمات نمایش نتیجه | ✅ |
+| الگوی سؤالات | تعیین تعداد سؤالات چهارگزینه‌ای، صحیح/غلط، کوتاه‌پاسخ و تشریحی | ✅ |
+| ویرایشگر سؤال | ذخیره پیش‌نویس، امتیازدهی، پاسخ صحیح، راهنمای تصحیح و Rubric | ✅ |
+| دستیار هوشمند | پیشنهاد Rubric برای سؤال تشریحی با تأیید نهایی معلم | ✅ |
+| کنترل آمادگی | بررسی کامل‌بودن سؤال‌ها، تطابق بارم و نهایی‌سازی آزمون | ✅ |
+| زمان‌بندی | بازه شروع و پایان، مدت آزمون و لینک اختصاصی دانش‌آموز | ✅ |
+| دعوت‌نامه | صف ارسال ایمیل دعوت به آزمون | ✅ |
+| برگزاری آزمون | دسترسی Token-based، تایمر و اعتبارسنجی زمان در Backend | ✅ |
+| تصحیح عینی | تصحیح قطعی سؤالات چهارگزینه‌ای و صحیح/غلط | ✅ |
+| تصحیح تشریحی | ارزیابی کوتاه‌پاسخ و تشریحی با امتیاز، بازخورد و Confidence | ✅ |
+| Human-in-the-loop | ارجاع پاسخ‌های کم‌اطمینان به معلم و امکان اصلاح نمره | ✅ |
+| ثبت تغییرات | نگهداری تاریخچه تغییر نمره و منبع ارزیابی | ✅ |
+| انتشار نتایج | لینک اختصاصی نتیجه، بازخورد و پاسخ صحیح بر اساس تنظیمات آزمون | ✅ |
+| رتبه‌بندی | جدول رتبه‌بندی عمومی و محدود به همان کلاس | ✅ |
+| اعتراض | ثبت اعتراض به یک پاسخ یا کل آزمون و رسیدگی توسط معلم | ✅ |
+| پردازش پس‌زمینه | صف‌های مستقل تصحیح، هوش مصنوعی، ایمیل و رتبه‌بندی | ✅ |
+
+## جریان کار سامانه
+
+| مرحله | کاربر/سرویس | شرح |
+|---:|---|---|
+| ۱ | معلم | ثبت‌نام، ساخت کلاس و افزودن دانش‌آموزان |
+| ۲ | معلم | ساخت آزمون، تعریف Blueprint و تکمیل سؤال‌ها |
+| ۳ | سامانه | بررسی آمادگی، تطابق مجموع نمرات و نهایی‌سازی آزمون |
+| ۴ | معلم | زمان‌بندی آزمون و ارسال دعوت‌نامه‌ها |
+| ۵ | دانش‌آموز | ورود از طریق لینک اختصاصی و ثبت پاسخ‌ها در بازه مجاز |
+| ۶ | Worker | تصحیح پاسخ‌های عینی و ارزیابی پاسخ‌های تشریحی |
+| ۷ | معلم | بازبینی موارد حساس، اصلاح نمره و تأیید نتایج |
+| ۸ | سامانه | انتشار لینک نتیجه و به‌روزرسانی رتبه‌بندی |
+| ۹ | دانش‌آموز و معلم | ثبت اعتراض و رسیدگی نهایی |
+
+## معماری
+
+```mermaid
+flowchart LR
+    U[Teacher / Student] --> W[Next.js Web App]
+    W --> A[FastAPI REST API]
+    A --> P[(PostgreSQL)]
+    A --> R[(Redis)]
+    R --> C[Celery Worker]
+    C --> P
+    C --> AI[Mock / Gemini]
+    C --> E[Mock / SMTP / Gmail]
 ```
 
-## Run Infrastructure
+معماری پروژه به‌صورت Monorepo است. عملیات سریع و هم‌زمان توسط API انجام می‌شوند و کارهای زمان‌بر مانند تصحیح هوشمند، ارسال ایمیل و به‌روزرسانی رتبه‌بندی به Worker سپرده می‌شوند.
+
+## فناوری‌های استفاده‌شده
+
+| لایه | فناوری‌ها |
+|---|---|
+| Frontend | Next.js 16، React 19، TypeScript، Tailwind CSS |
+| مدیریت داده در Frontend | TanStack Query، Zustand |
+| فرم و اعتبارسنجی | React Hook Form، Zod |
+| Backend | Python، FastAPI، Pydantic |
+| ORM و Migration | SQLAlchemy 2، Alembic |
+| پایگاه داده | PostgreSQL 16 |
+| صف و Cache | Redis 7، Celery 5 |
+| هوش مصنوعی | Google Gemini و Mock Provider |
+| ایمیل | SMTP، Gmail و Mock Provider |
+| تست | Pytest |
+| زیرساخت محلی | Docker Compose، PowerShell |
+| Package Manager | pnpm Workspace |
+
+## ساختار پروژه
+
+```text
+exam_product/
+├── apps/
+│   ├── api/                 # FastAPI، ماژول‌های دامنه و Migrationها
+│   │   ├── alembic/
+│   │   └── app/
+│   │       ├── api/
+│   │       ├── core/
+│   │       ├── db/
+│   │       ├── infrastructure/
+│   │       └── modules/
+│   ├── web/                 # رابط کاربری Next.js
+│   │   ├── app/
+│   │   ├── components/
+│   │   ├── features/
+│   │   ├── lib/
+│   │   └── types/
+│   └── worker/              # Workerها و Taskهای Celery
+│       ├── services/
+│       └── tasks/
+├── infra/                   # محل تنظیمات زیرساخت و استقرار
+├── scripts/dev/             # اسکریپت اجرای یکپارچه در Windows
+├── tests/                   # تست‌های Backend و جریان‌های اصلی
+├── docker-compose.yml       # PostgreSQL و Redis
+├── pnpm-workspace.yaml
+├── .env.example
+└── README.md
+```
+
+## راه‌اندازی سریع
+
+### پیش‌نیازها
+
+| ابزار | نسخه پیشنهادی | کاربرد |
+|---|---:|---|
+| Git | نسخه پایدار | دریافت و مدیریت کد |
+| Python | `3.11+` | API و Worker |
+| Node.js | `20+` | رابط کاربری |
+| pnpm | `11.0.9` | مدیریت وابستگی‌های Frontend |
+| Docker | نسخه پایدار | اجرای PostgreSQL و Redis |
+| PowerShell | `5.1+` | اجرای اسکریپت یکپارچه در Windows |
+
+### ۱. دریافت پروژه
+
+```powershell
+git clone https://github.com/MrAshki/exam_product.git
+cd exam_product
+```
+
+### ۲. ساخت تنظیمات محلی
+
+```powershell
+Copy-Item .env.example .env
+```
+
+پیش از هر استفاده جدی، مقدار `SECRET_KEY` را در فایل `.env` تغییر دهید. حالت پیش‌فرض AI و ایمیل، `mock` است و به سرویس خارجی متصل نمی‌شود.
+
+### ۳. نصب وابستگی‌ها
+
+```powershell
+py -3.11 -m venv .venv
+.\.venv\Scripts\python.exe -m pip install --upgrade pip
+.\.venv\Scripts\python.exe -m pip install -r apps\api\requirements.txt
+pnpm install
+```
+
+### ۴. اجرای کل پروژه در Windows
+
+```powershell
+.\run-all.cmd
+```
+
+این فرمان PostgreSQL و Redis را اجرا می‌کند، Migrationها را اعمال می‌کند و API، Worker و Frontend را در Terminalهای جداگانه بالا می‌آورد. مرورگر نیز به‌صورت خودکار باز می‌شود.
+
+برای توقف پردازش‌های برنامه:
+
+```powershell
+.\stop-all.cmd
+```
+
+برای توقف برنامه به‌همراه سرویس‌های Docker:
+
+```powershell
+.\stop-all.cmd -StopInfrastructure
+```
+
+### گزینه‌های Runner
+
+| فرمان | کاربرد |
+|---|---|
+| `.\run-all.cmd` | اجرای امن با AI و ایمیل Mock |
+| `.\run-all.cmd -Clean` | پاک‌سازی Cache مربوط به Next.js و اجرای مجدد |
+| `.\run-all.cmd -NoBrowser` | اجرا بدون بازکردن مرورگر |
+| `.\run-all.cmd -NoWorker` | اجرا بدون Celery Worker |
+| `.\run-all.cmd -UseConfiguredAI` | استفاده از AI تنظیم‌شده در `.env` |
+| `.\run-all.cmd -UseConfiguredEmail` | استفاده از ایمیل تنظیم‌شده در `.env` |
+| `.\run-all.cmd -UseConfiguredProviders` | استفاده هم‌زمان از AI و ایمیل واقعی |
+| `.\run-all.cmd -CheckConfiguredProviders` | فقط بررسی تنظیمات Providerها، بدون اجرای سرویس‌ها |
+
+> [!WARNING]
+> گزینه‌های `UseConfigured...` ممکن است سهمیه سرویس هوش مصنوعی مصرف کنند یا ایمیل واقعی بفرستند. برای توسعه روزمره از حالت پیش‌فرض Mock استفاده کنید.
+
+## اجرای دستی سرویس‌ها
+
+اگر از Runner ویندوز استفاده نمی‌کنید، سرویس‌ها را در Terminalهای جداگانه اجرا کنید.
+
+### زیرساخت و Migration
 
 ```bash
 docker compose up -d
+cd apps/api
+../../.venv/Scripts/python -m alembic upgrade head
 ```
 
-## Run API Locally
+در Linux و macOS به‌جای `.venv/Scripts/python` از `.venv/bin/python` استفاده کنید.
+
+### API
 
 ```bash
 cd apps/api
-python -m venv .venv
-.venv\Scripts\activate
-pip install -r requirements.txt
-copy ..\..\.env.example ..\..\.env
-uvicorn app.main:app --reload
+../../.venv/Scripts/python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8081
 ```
 
-The API will run at `http://127.0.0.1:8000`.
-
-## Health Check
+### Worker
 
 ```bash
-curl http://127.0.0.1:8000/health
+.venv/Scripts/python -m celery -A apps.worker.worker:celery_app worker --loglevel=INFO --pool=solo
 ```
 
-Expected response:
-
-```json
-{
-  "success": true,
-  "data": {
-    "status": "ok",
-    "service": "Class-Centric AI Exam Platform API",
-    "version": "0.1.0"
-  },
-  "message": "Service is healthy."
-}
-```
-
-## Migrations
-
-Create a migration:
+### Frontend
 
 ```bash
-cd apps/api
-alembic revision --autogenerate -m "initial"
+pnpm --filter web dev
 ```
 
-Run migrations:
+## تنظیم سرویس‌های خارجی
+
+مقادیر کامل و پیش‌فرض‌ها در فایل [`.env.example`](./.env.example) قرار دارند.
+
+| گروه | متغیرهای مهم | توضیح |
+|---|---|---|
+| برنامه | `PROJECT_NAME`، `APP_DEBUG`، `SECRET_KEY` | مشخصات و تنظیمات اصلی API |
+| نشست | `COOKIE_NAME`، `COOKIE_SECURE`، `COOKIE_SAMESITE` | تنظیم Cookie احراز هویت |
+| Frontend | `FRONTEND_BASE_URL`، `NEXT_PUBLIC_API_BASE_URL` | آدرس ارتباط Web و API |
+| CORS | `BACKEND_CORS_ORIGINS` | Originهای مجاز، جداشده با ویرگول |
+| PostgreSQL | `DATABASE_URL` یا متغیرهای `POSTGRES_*` | اتصال پایگاه داده |
+| Redis/Celery | `REDIS_URL`، `CELERY_BROKER_URL`، `CELERY_RESULT_BACKEND` | صف و نتیجه Taskها |
+| هوش مصنوعی | `AI_PROVIDER`، `AI_MODEL`، `GEMINI_API_KEY` | Provider مدل هوش مصنوعی |
+| ایمیل | `EMAIL_PROVIDER` و متغیرهای `SMTP_*` | Provider و مشخصات ارسال ایمیل |
+
+برای فعال‌کردن Gemini:
+
+```dotenv
+AI_PROVIDER=gemini
+AI_MODEL=gemini-2.0-flash
+GEMINI_API_KEY=your_api_key
+```
+
+برای فعال‌کردن ایمیل، مقدار `EMAIL_PROVIDER` را روی `smtp` یا `gmail` قرار دهید و مشخصات `SMTP_*` را تکمیل کنید.
+
+## آدرس سرویس‌ها
+
+| سرویس | آدرس محلی |
+|---|---|
+| Frontend | <http://localhost:3000> |
+| API | <http://localhost:8081> |
+| Swagger UI | <http://localhost:8081/docs> |
+| ReDoc | <http://localhost:8081/redoc> |
+| Health Check | <http://localhost:8081/health> |
+| PostgreSQL | `localhost:55432` |
+| Redis | `localhost:16379` |
+
+در آدرس‌های قابل مشاهده توسط مرورگر، همیشه از `localhost` استفاده کنید و آن را با `127.0.0.1` ترکیب نکنید؛ این موضوع روی Cookie و CORS اثر می‌گذارد.
+
+## تست و کنترل کیفیت
+
+تست‌های Backend از ریشه پروژه اجرا می‌شوند:
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest -q
+```
+
+کنترل‌های Frontend:
 
 ```bash
-cd apps/api
-alembic upgrade head
+pnpm --filter web lint
+pnpm --filter web typecheck
+pnpm --filter web build
 ```
 
-There are no business models yet, so an autogenerated initial migration should
-be empty until Phase 2 introduces domain tables.
+مجموعه تست فعلی، جریان‌هایی مانند احراز هویت، Migrationها، دسترسی دانش‌آموز، تصحیح قطعی و هوشمند، بازبینی معلم، انتشار نتایج، رتبه‌بندی و اعتراض را پوشش می‌دهد. تست‌های AI با Mock اجرا می‌شوند و نباید درخواست واقعی به Gemini ارسال کنند.
+
+## نقشه راه
+
+| اولویت | مورد | وضعیت |
+|:---:|---|:---:|
+| بالا | تکمیل و پایدارسازی جریان ساخت، برگزاری و بازبینی آزمون | 🛠️ در حال انجام |
+| بالا | افزایش تست‌های Integration و End-to-End | 🛠️ در حال انجام |
+| بالا | بازبینی امنیت، محدودسازی درخواست‌ها و آماده‌سازی Production | 📌 برنامه‌ریزی‌شده |
+| متوسط | بهبود تجربه کاربری، دسترس‌پذیری و نمایش در موبایل | 📌 برنامه‌ریزی‌شده |
+| متوسط | گزارش‌ها و تحلیل‌های پیشرفته عملکرد کلاس | 📌 برنامه‌ریزی‌شده |
+| متوسط | خروجی قابل چاپ/PDF برای آزمون و گزارش‌ها | 📌 برنامه‌ریزی‌شده |
+| پایین | تکمیل تنظیمات استقرار، مانیتورینگ و مستندات عملیاتی | 📌 برنامه‌ریزی‌شده |
+
+## امنیت
+
+- فایل `.env` در Git نادیده گرفته شده است؛ کلیدها، رمزها و Tokenها را Commit نکنید.
+- برای Production یک `SECRET_KEY` طولانی و تصادفی تنظیم کنید.
+- در محیط HTTPS مقدار `COOKIE_SECURE=true` را فعال کنید.
+- Originهای مجاز CORS را به دامنه‌های واقعی برنامه محدود کنید.
+- از حالت Mock برای توسعه و تست روزمره استفاده کنید.
+- خروجی AI تصمیم نهایی نیست؛ پاسخ‌های کم‌اطمینان یا نامعتبر باید توسط معلم بررسی شوند.
+- لینک‌های آزمون و نتیجه را مانند اطلاعات محرمانه نگهداری کنید.
+
+> [!CAUTION]
+> وضعیت «در حال توسعه» به این معناست که پروژه هنوز ممیزی امنیتی Production نشده است. از اطلاعات واقعی و حساس دانش‌آموزان در محیط توسعه استفاده نکنید.
+
+## مشارکت در توسعه
+
+برای ایجاد تغییر:
+
+1. یک Branch مجزا بسازید.
+2. تغییر را کوچک، متمرکز و همراه با تست نگه دارید.
+3. تست‌های Backend و کنترل‌های Frontend را اجرا کنید.
+4. توضیح روشنی از مسئله، راه‌حل و نحوه تست در Pull Request بنویسید.
+
+---
+
+<div align="center">
+
+این پروژه با تمرکز بر **کنترل معلم، بازخورد شفاف و استفاده مسئولانه از هوش مصنوعی** در حال ساخت است.
+
+</div>
