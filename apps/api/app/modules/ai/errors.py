@@ -18,11 +18,15 @@ def ai_configuration_error(message: str = "AI provider is not configured correct
     )
 
 
-def ai_provider_error(message: str = "AI provider request failed.") -> AppException:
+def ai_provider_error(
+    message: str = "AI provider request failed.",
+    details: dict | None = None,
+) -> AppException:
     return AppException(
         code=AIErrorCode.AI_PROVIDER_ERROR,
         message=message,
         status_code=status.HTTP_502_BAD_GATEWAY,
+        details=details,
     )
 
 

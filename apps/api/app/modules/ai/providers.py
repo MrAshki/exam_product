@@ -5,7 +5,9 @@ from typing import Any, Protocol
 import httpx
 
 from app.core.config import settings
+from app.core.exceptions import AppException
 from app.modules.ai.errors import ai_configuration_error, ai_provider_error, ai_task_not_supported
+from app.modules.ai.parser import parse_rubric_response
 from app.modules.ai.schemas import GatewayResult
 
 
@@ -148,8 +150,22 @@ class GeminiProvider:
             )
             response.raise_for_status()
             response_json = response.json()
+        except httpx.TimeoutException as exc:
+            raise ai_provider_error(
+                "AI provider request failed.",
+                details={"provider": self.name, "error": "timeout"},
+            ) from exc
+        except httpx.HTTPStatusError as exc:
+            status_code = exc.response.status_code if exc.response is not None else None
+            raise ai_provider_error(
+                "AI provider request failed.",
+                details={"provider": self.name, "status_code": status_code},
+            ) from exc
         except httpx.HTTPError as exc:
-            raise ai_provider_error(str(exc)) from exc
+            raise ai_provider_error(
+                "AI provider request failed.",
+                details={"provider": self.name, "error": "http_error"},
+            ) from exc
         except ValueError as exc:
             raise ai_provider_error("Gemini response was not valid JSON.") from exc
 
@@ -201,32 +217,95 @@ class OpenRouterProvider:
             raise ai_configuration_error("OPENROUTER_BASE_URL is required when AI_PROVIDER=openrouter.")
 
         task_config = get_task_model_config(task_name)
-        result = self._request_completion(
+        has_distinct_fallback = bool(task_config.fallback_model and task_config.fallback_model != task_config.primary_model)
+        result = self._request_completion_with_optional_fallback(
             prompt=prompt,
-            models=self._ordered_models(task_config.primary_model, task_config.fallback_model),
             task_config=task_config,
+            has_distinct_fallback=has_distinct_fallback,
         )
 
         if task_config.response_format == JSON_OBJECT_RESPONSE_FORMAT:
             parsed = self._parse_json_content(result.text)
             if parsed is None:
-                if task_config.fallback_model and task_config.fallback_model != task_config.primary_model:
-                    actual_model = result.model or task_config.primary_model
-                    if actual_model != task_config.fallback_model:
-                        fallback_result = self._request_completion(
-                            prompt=prompt,
-                            models=[task_config.fallback_model],
-                            task_config=task_config,
-                        )
-                        fallback_parsed = self._parse_json_content(fallback_result.text)
-                        if fallback_parsed is None:
-                            raise ai_provider_error("OpenRouter response content was not valid JSON.")
-                        fallback_result.response_json = fallback_parsed
-                        return fallback_result
-                raise ai_provider_error("OpenRouter response content was not valid JSON.")
+                return self._retry_fallback_for_invalid_content(
+                    prompt=prompt,
+                    task_config=task_config,
+                    response_schema=response_schema,
+                    metadata=metadata,
+                    has_distinct_fallback=has_distinct_fallback,
+                    actual_model=result.model,
+                    error=ai_provider_error(
+                        "AI provider request failed.",
+                        details={"provider": self.name, "error": "invalid_json"},
+                    ),
+                )
             result.response_json = parsed
+            schema_error = self._validate_response_schema(response_schema, result.text, metadata)
+            if schema_error is not None:
+                return self._retry_fallback_for_invalid_content(
+                    prompt=prompt,
+                    task_config=task_config,
+                    response_schema=response_schema,
+                    metadata=metadata,
+                    has_distinct_fallback=has_distinct_fallback,
+                    actual_model=result.model,
+                    error=schema_error,
+                )
 
         return result
+
+    def _request_completion_with_optional_fallback(
+        self,
+        *,
+        prompt: str,
+        task_config: Any,
+        has_distinct_fallback: bool,
+    ) -> GatewayResult:
+        try:
+            return self._request_completion(
+                prompt=prompt,
+                models=self._ordered_models(task_config.primary_model, task_config.fallback_model),
+                task_config=task_config,
+            )
+        except AppException as exc:
+            if exc.code != "AI_PROVIDER_ERROR" or not has_distinct_fallback:
+                raise
+            return self._request_completion(
+                prompt=prompt,
+                models=[task_config.fallback_model],
+                task_config=task_config,
+            )
+
+    def _retry_fallback_for_invalid_content(
+        self,
+        *,
+        prompt: str,
+        task_config: Any,
+        response_schema: dict[str, Any] | None,
+        metadata: dict[str, Any] | None,
+        has_distinct_fallback: bool,
+        actual_model: str | None,
+        error: AppException,
+    ) -> GatewayResult:
+        if not has_distinct_fallback or actual_model == task_config.fallback_model:
+            raise error
+
+        fallback_result = self._request_completion(
+            prompt=prompt,
+            models=[task_config.fallback_model],
+            task_config=task_config,
+        )
+        fallback_parsed = self._parse_json_content(fallback_result.text)
+        if fallback_parsed is None:
+            raise ai_provider_error(
+                "AI provider request failed.",
+                details={"provider": self.name, "error": "invalid_json"},
+            )
+        fallback_result.response_json = fallback_parsed
+        fallback_schema_error = self._validate_response_schema(response_schema, fallback_result.text, metadata)
+        if fallback_schema_error is not None:
+            raise fallback_schema_error
+        return fallback_result
 
     def _request_completion(
         self,
@@ -265,26 +344,47 @@ class OpenRouterProvider:
             response.raise_for_status()
             response_json = response.json()
         except httpx.TimeoutException as exc:
-            raise ai_provider_error("OpenRouter request timed out.") from exc
+            raise ai_provider_error(
+                "AI provider request failed.",
+                details={"provider": self.name, "error": "timeout"},
+            ) from exc
         except httpx.HTTPStatusError as exc:
-            status_code = exc.response.status_code if exc.response is not None else "unknown"
-            raise ai_provider_error(f"OpenRouter request failed with status {status_code}.") from exc
+            status_code = exc.response.status_code if exc.response is not None else None
+            raise ai_provider_error(
+                "AI provider request failed.",
+                details={"provider": self.name, "status_code": status_code},
+            ) from exc
         except httpx.HTTPError as exc:
-            raise ai_provider_error("OpenRouter request failed.") from exc
+            raise ai_provider_error(
+                "AI provider request failed.",
+                details={"provider": self.name, "error": "http_error"},
+            ) from exc
         except ValueError as exc:
-            raise ai_provider_error("OpenRouter response was not valid JSON.") from exc
+            raise ai_provider_error(
+                "AI provider request failed.",
+                details={"provider": self.name, "error": "invalid_provider_json"},
+            ) from exc
 
         if not isinstance(response_json, dict):
-            raise ai_provider_error("OpenRouter response was not a JSON object.")
+            raise ai_provider_error(
+                "AI provider request failed.",
+                details={"provider": self.name, "error": "invalid_provider_json"},
+            )
 
         try:
             choice = response_json["choices"][0]
             message = choice["message"]
             text = message["content"]
         except (KeyError, IndexError, TypeError) as exc:
-            raise ai_provider_error("OpenRouter response did not include text output.") from exc
+            raise ai_provider_error(
+                "AI provider request failed.",
+                details={"provider": self.name, "error": "missing_text"},
+            ) from exc
         if not isinstance(text, str) or not text.strip():
-            raise ai_provider_error("OpenRouter response text output was empty.")
+            raise ai_provider_error(
+                "AI provider request failed.",
+                details={"provider": self.name, "error": "empty_text"},
+            )
 
         usage = response_json.get("usage") or {}
         if not isinstance(usage, dict):
@@ -316,6 +416,21 @@ class OpenRouterProvider:
             return None
         if isinstance(parsed, (dict, list)):
             return parsed
+        return None
+
+    @staticmethod
+    def _validate_response_schema(
+        response_schema: dict[str, Any] | None,
+        text: str,
+        metadata: dict[str, Any] | None,
+    ) -> AppException | None:
+        if not response_schema or response_schema.get("type") != "rubric":
+            return None
+        try:
+            total_points = Decimal(str((metadata or {}).get("total_points")))
+            parse_rubric_response(text, total_points)
+        except AppException as exc:
+            return exc
         return None
 
     @staticmethod

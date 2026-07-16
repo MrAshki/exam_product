@@ -280,7 +280,8 @@ def test_openrouter_timeout_fails_safely_without_secret(openrouter_settings, mon
         OpenRouterProvider(api_key="secret-value").generate_text(TASK_SHORT_ANSWER_GRADING, "prompt")
 
     assert exc.value.code == "AI_PROVIDER_ERROR"
-    assert "timed out" in exc.value.message
+    assert exc.value.message == "AI provider request failed."
+    assert exc.value.details == {"provider": "openrouter", "error": "timeout"}
     assert "secret-value" not in exc.value.message
 
 
@@ -292,7 +293,8 @@ def test_openrouter_invalid_http_json_fails_safely(openrouter_settings, monkeypa
         OpenRouterProvider(api_key="secret-value").generate_text(TASK_SHORT_ANSWER_GRADING, "prompt")
 
     assert exc.value.code == "AI_PROVIDER_ERROR"
-    assert "not valid JSON" in exc.value.message
+    assert exc.value.message == "AI provider request failed."
+    assert exc.value.details == {"provider": "openrouter", "error": "invalid_provider_json"}
 
 
 def test_openrouter_non_object_http_json_fails_safely(openrouter_settings, monkeypatch) -> None:
@@ -303,7 +305,8 @@ def test_openrouter_non_object_http_json_fails_safely(openrouter_settings, monke
         OpenRouterProvider(api_key="secret-value").generate_text(TASK_SHORT_ANSWER_GRADING, "prompt")
 
     assert exc.value.code == "AI_PROVIDER_ERROR"
-    assert "JSON object" in exc.value.message
+    assert exc.value.message == "AI provider request failed."
+    assert exc.value.details == {"provider": "openrouter", "error": "invalid_provider_json"}
 
 
 @pytest.mark.parametrize(
@@ -439,6 +442,25 @@ def test_gemini_provider_remains_compatible(monkeypatch) -> None:
     assert calls[0]["timeout"] == 9
     assert result.provider == "gemini"
     assert result.model == "gemini-test"
+
+
+def test_gemini_provider_http_error_does_not_expose_key(monkeypatch) -> None:
+    def fake_post(url, **kwargs):
+        response = FakeResponse(status_code=403)
+        request = httpx.Request("POST", f"{url}?key=super-secret-gemini-key")
+        raise httpx.HTTPStatusError("failed url includes key=super-secret-gemini-key", request=request, response=response)
+
+    monkeypatch.setattr("app.modules.ai.providers.httpx.post", fake_post)
+    provider = GeminiProvider(api_key="super-secret-gemini-key", model="gemini-test", timeout_seconds=9)
+
+    with pytest.raises(AppException) as exc:
+        provider.generate_text(TASK_SHORT_ANSWER_GRADING, "prompt")
+
+    assert exc.value.code == "AI_PROVIDER_ERROR"
+    assert exc.value.message == "AI provider request failed."
+    assert exc.value.details == {"provider": "gemini", "status_code": 403}
+    assert "super-secret-gemini-key" not in exc.value.message
+    assert "key=" not in exc.value.message
 
 
 def test_gateway_callers_do_not_need_task_model_arguments() -> None:

@@ -1,8 +1,11 @@
 import hashlib
 import json
+import logging
 import time
+from datetime import date, datetime
 from decimal import Decimal
 from typing import Any
+from uuid import UUID
 
 from sqlalchemy.orm import Session
 
@@ -15,6 +18,9 @@ from app.modules.ai.parser import parse_grading_response, parse_rubric_response
 from app.modules.ai.prompts import build_suggest_essay_rubric_prompt
 from app.modules.ai.repository import AIRepository
 from app.modules.ai.schemas import AICallContext
+
+
+logger = logging.getLogger(__name__)
 
 
 class AIService:
@@ -77,6 +83,7 @@ class AIService:
                 status="failed",
                 prompt_hash=prompt_hash,
                 request_json=request_json,
+                response_json=self._json_safe({"details": exc.details}) if exc.details else None,
                 error_code=exc.code,
                 error_message=exc.message,
                 latency_ms=self._latency_ms(started_at),
@@ -130,6 +137,7 @@ class AIService:
                 status="failed",
                 prompt_hash=prompt_hash,
                 request_json=request_json,
+                response_json=self._json_safe({"details": exc.details}) if exc.details else None,
                 error_code=exc.code,
                 error_message=exc.message,
                 latency_ms=self._latency_ms(started_at),
@@ -145,6 +153,7 @@ class AIService:
                 status="failed",
                 prompt_hash=prompt_hash,
                 request_json=request_json,
+                response_json=self._json_safe({"details": error.details}) if error.details else None,
                 error_code=error.code,
                 error_message=error.message,
                 latency_ms=self._latency_ms(started_at),
@@ -178,8 +187,8 @@ class AIService:
             model=model,
             status=status,
             prompt_hash=prompt_hash,
-            request_json=request_json,
-            response_json=response_json,
+            request_json=self._json_safe(request_json),
+            response_json=self._json_safe(response_json),
             raw_response=raw_response,
             error_code=error_code,
             error_message=error_message,
@@ -189,16 +198,34 @@ class AIService:
         )
         try:
             self.repository.create_log(log)
-        except Exception:
+        except Exception as exc:
             self.repository.rollback()
+            logger.warning(
+                "AI log persistence failed for task %s with status %s: %s",
+                task_name,
+                status,
+                type(exc).__name__,
+            )
 
     @staticmethod
     def _latency_ms(started_at: float) -> int:
         return int((time.perf_counter() - started_at) * 1000)
 
     @staticmethod
-    def _json_safe(payload: dict[str, Any]) -> dict[str, Any]:
-        return json.loads(json.dumps(payload, default=str))
+    def _json_safe(payload: Any) -> Any:
+        if payload is None:
+            return None
+        return json.loads(json.dumps(payload, default=AIService._json_default))
+
+    @staticmethod
+    def _json_default(value: Any) -> str:
+        if isinstance(value, Decimal):
+            return str(value)
+        if isinstance(value, UUID):
+            return str(value)
+        if isinstance(value, (date, datetime)):
+            return value.isoformat()
+        return str(value)
 
     @staticmethod
     def _expected_log_metadata(task_name: str) -> tuple[str, str]:

@@ -5,6 +5,16 @@ from typing import Any
 from app.modules.ai.errors import ai_response_invalid
 
 
+def _decimal_from_value(value: Any) -> Decimal | None:
+    try:
+        decimal_value = Decimal(str(value))
+    except (InvalidOperation, TypeError, ValueError):
+        return None
+    if not decimal_value.is_finite():
+        return None
+    return decimal_value
+
+
 def parse_rubric_response(raw_text: str, expected_total_points: Decimal) -> dict[str, Any]:
     try:
         parsed = json.loads(raw_text)
@@ -18,7 +28,7 @@ def parse_rubric_response(raw_text: str, expected_total_points: Decimal) -> dict
     if not isinstance(criteria, list) or not criteria:
         errors.setdefault("criteria", []).append("Criteria must be a non-empty list.")
 
-    expected_total = Decimal(expected_total_points)
+    expected_total = Decimal(str(expected_total_points))
     total = Decimal("0")
     if isinstance(criteria, list):
         for index, criterion in enumerate(criteria):
@@ -28,10 +38,12 @@ def parse_rubric_response(raw_text: str, expected_total_points: Decimal) -> dict
                 continue
             if not criterion.get("name"):
                 errors.setdefault(f"{field}.name", []).append("Name is required.")
+            description = criterion.get("description")
+            if not isinstance(description, str):
+                errors.setdefault(f"{field}.description", []).append("Description must be a string.")
             points = criterion.get("points")
-            try:
-                criterion_points = Decimal(str(points))
-            except (InvalidOperation, TypeError):
+            criterion_points = _decimal_from_value(points)
+            if criterion_points is None:
                 errors.setdefault(f"{field}.points", []).append("Points must be numeric.")
                 continue
             if criterion_points <= 0:
@@ -40,13 +52,11 @@ def parse_rubric_response(raw_text: str, expected_total_points: Decimal) -> dict
                 total += criterion_points
 
     response_total = parsed.get("total_points") if isinstance(parsed, dict) else None
-    try:
-        response_total_decimal = Decimal(str(response_total))
-    except (InvalidOperation, TypeError):
+    response_total_decimal = _decimal_from_value(response_total)
+    if response_total_decimal is None:
         errors.setdefault("total_points", []).append("Total points must be numeric.")
-        response_total_decimal = None
-    if response_total_decimal is not None and response_total_decimal != expected_total:
-        errors.setdefault("total_points", []).append("Total points must match the question points.")
+    elif response_total_decimal != expected_total:
+        errors.setdefault("total_points", []).append("Total points must equal the question points.")
 
     if total and total != expected_total:
         errors.setdefault("criteria", []).append("Criteria points must sum to the question points.")

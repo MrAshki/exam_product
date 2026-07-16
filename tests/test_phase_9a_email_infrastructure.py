@@ -4,6 +4,7 @@ import pytest
 from sqlalchemy import inspect, select
 from sqlalchemy.exc import OperationalError
 
+from app.core.config import settings
 from app.db.session import SessionLocal, engine
 from app.infrastructure.email.email_service import EmailService
 from app.infrastructure.email.templates import render_email_template
@@ -14,6 +15,11 @@ from app.modules.notifications.models import EmailLog
 from apps.worker.services.job_worker_service import JobWorkerService
 from apps.worker.tasks.email_tasks import EMAIL_SEND_TASK_NAME
 from apps.worker.worker import celery_app
+
+
+@pytest.fixture(autouse=True)
+def mock_email_provider(monkeypatch) -> None:
+    monkeypatch.setattr(settings, "EMAIL_PROVIDER", "mock")
 
 
 def _email() -> str:
