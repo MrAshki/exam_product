@@ -1,6 +1,6 @@
 import { getExam } from "@/features/exams/api";
 import { apiClient } from "@/lib/api-client";
-import type { Blueprint, BlueprintPayload } from "@/types/blueprint";
+import type { Blueprint, BlueprintPayload, BlueprintUpdatePayload } from "@/types/blueprint";
 import type { Exam, ExamFinalizeResult, ExamReadiness, ExamReopenResult } from "@/types/exam";
 import type { Question, QuestionUpdatePayload, RubricSuggestion } from "@/types/question";
 
@@ -18,7 +18,7 @@ export function createBlueprint(classId: string, examId: string, payload: Bluepr
   return apiClient.post<Blueprint>(`/classes/${classId}/exams/${examId}/blueprint`, payload);
 }
 
-export function updateBlueprint(classId: string, examId: string, payload: BlueprintPayload) {
+export function updateBlueprint(classId: string, examId: string, payload: BlueprintUpdatePayload) {
   return apiClient.put<Blueprint>(`/classes/${classId}/exams/${examId}/blueprint`, payload);
 }
 

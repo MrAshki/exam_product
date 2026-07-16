@@ -41,9 +41,9 @@ export function QuestionSlotList({ questions, selectedQuestionId, onSelect }: Qu
           <div className="flex items-start justify-between gap-3">
             <div>
               <p className="text-sm font-semibold text-ink-900">سوال {question.order_index}</p>
-              <p className="mt-1 text-xs text-ink-500">{typeLabels[question.type] || question.type}</p>
+              <p className="mt-1 text-xs text-ink-500">{typeLabels[question.type] || "نوع نامشخص"}</p>
             </div>
-            <Badge>{statusLabels[question.status] ?? question.status}</Badge>
+            <Badge>{statusLabels[question.status] ?? "وضعیت نامشخص"}</Badge>
           </div>
           <p className="mt-2 line-clamp-2 text-xs leading-5 text-ink-500">{question.text || "هنوز متن سوال وارد نشده است."}</p>
           <p className="mt-2 text-xs text-ink-500">نمره: {formatDecimal(question.points)}</p>

@@ -32,7 +32,7 @@ function scoreDefault(answer: ReviewAnswer) {
 export function AnswerReviewForm({ classId, examId, answer }: AnswerReviewFormProps) {
   const mutation = useReviewAnswer(classId, examId, answer.answer_id);
   const [teacherScore, setTeacherScore] = useState(scoreDefault(answer));
-  const [feedback, setFeedback] = useState(answer.ai_feedback ?? "");
+  const [feedback, setFeedback] = useState(answer.teacher_feedback ?? "");
   const [reason, setReason] = useState("");
   const [localError, setLocalError] = useState<string | null>(null);
   const maxScore = useMemo(() => numberOrNull(answer.max_score), [answer.max_score]);
@@ -55,7 +55,7 @@ export function AnswerReviewForm({ classId, examId, answer }: AnswerReviewFormPr
     setLocalError(null);
     await mutation.mutateAsync({
       teacher_score: teacherScore,
-      feedback: feedback.trim() || null,
+      teacher_feedback: feedback.trim() || null,
       reason: reason.trim() || null
     });
   }

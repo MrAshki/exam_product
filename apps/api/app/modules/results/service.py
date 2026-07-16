@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.modules.auth.models import User
 from app.modules.exams.status import ExamStatus
+from app.modules.grading.feedback import student_visible_feedback
 from app.modules.jobs.models import JobLog
 from app.modules.jobs.status import EMAIL_QUEUE, LEADERBOARD_QUEUE, JobStatus, JobType
 from app.modules.notifications.constants import EmailType
@@ -335,7 +336,7 @@ class PublishResultsService:
             "correct_answer_data": question.correct_answer_data if exam.show_correct_answers else None,
             "final_score": PublishResultsService._decimal_to_string(answer.final_score),
             "max_score": PublishResultsService._decimal_to_string(answer.max_score),
-            "feedback": answer.ai_feedback if exam.show_feedback else None,
+            "feedback": student_visible_feedback(answer) if exam.show_feedback else None,
         }
 
     @staticmethod

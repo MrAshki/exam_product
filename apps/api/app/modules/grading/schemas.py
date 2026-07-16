@@ -6,10 +6,10 @@ from pydantic import BaseModel, Field, field_validator
 
 class AnswerReviewRequest(BaseModel):
     teacher_score: Decimal = Field(ge=0)
-    feedback: str | None = Field(default=None, max_length=10000)
+    teacher_feedback: str | None = Field(default=None, max_length=10000)
     reason: str | None = Field(default=None, max_length=10000)
 
-    @field_validator("feedback", "reason")
+    @field_validator("teacher_feedback", "reason")
     @classmethod
     def empty_string_becomes_null(cls, value: str | None) -> str | None:
         if value is None:
@@ -22,6 +22,7 @@ class AnswerReviewRead(BaseModel):
     answer_id: UUID
     submission_id: UUID
     teacher_score: Decimal
+    teacher_feedback: str | None
     final_score: Decimal
     reviewed_by_teacher: bool
     needs_review: bool

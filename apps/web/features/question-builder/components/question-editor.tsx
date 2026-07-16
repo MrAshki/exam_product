@@ -10,6 +10,7 @@ import { FormError } from "@/components/common/form-error";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { EssayFields } from "@/features/question-builder/components/essay-fields";
@@ -34,7 +35,7 @@ const questionSchema = z.object({
   grading_instructions: z.string(),
   expected_answer: z.string(),
   correct_answer: z.string(),
-  rubric: z.string(),
+  rubric: z.string().refine(isValidRubricJson, "راهنمای تصحیح باید JSON معتبر با فهرست criteria باشد."),
   rubric_teacher_confirmed: z.boolean(),
   option_a: z.string(),
   option_b: z.string(),
@@ -109,17 +110,44 @@ function stringifyRubric(value: unknown) {
   return JSON.stringify(value, null, 2);
 }
 
+function isRubricValue(value: unknown): value is Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return false;
+  }
+  const criteria = (value as Record<string, unknown>).criteria;
+  return (
+    Array.isArray(criteria) &&
+    criteria.length > 0 &&
+    criteria.every(
+      (criterion) =>
+        Boolean(criterion) &&
+        typeof criterion === "object" &&
+        !Array.isArray(criterion) &&
+        typeof (criterion as Record<string, unknown>).name === "string" &&
+        Number.isFinite(Number((criterion as Record<string, unknown>).points))
+    )
+  );
+}
+
+function isValidRubricJson(value?: string) {
+  const trimmed = value?.trim();
+  if (!trimmed) {
+    return true;
+  }
+  try {
+    return isRubricValue(JSON.parse(trimmed));
+  } catch {
+    return false;
+  }
+}
+
 function parseRubric(value?: string) {
   const trimmed = value?.trim();
   if (!trimmed) {
     return null;
   }
 
-  try {
-    return JSON.parse(trimmed) as unknown;
-  } catch {
-    return { text: trimmed };
-  }
+  return JSON.parse(trimmed) as unknown;
 }
 
 function optionalText(value?: string) {
@@ -181,7 +209,8 @@ function buildPayload(question: Question | QuestionSlot, values: QuestionFormOut
 
 export function QuestionEditor({ classId, examId, question, editable, onQuestionHydrated }: QuestionEditorProps) {
   const [suggestions, setSuggestions] = useState<Record<string, unknown>>({});
-  const [localError, setLocalError] = useState<Error | null>(null);
+  const [localError, setLocalError] = useState<string | null>(null);
+  const [acceptRubricOpen, setAcceptRubricOpen] = useState(false);
   const updateQuestion = useUpdateQuestion(classId, examId, question?.id ?? "");
   const suggestRubric = useSuggestRubric(classId, examId, question?.id ?? "");
   const locked = !editable;
@@ -237,17 +266,44 @@ export function QuestionEditor({ classId, examId, question, editable, onQuestion
       return;
     }
     if (!values.text.trim() || !values.expected_answer?.trim() || !values.points) {
-      setLocalError(new Error("برای پیشنهاد rubric، متن سوال، پاسخ مورد انتظار و نمره را وارد کنید."));
+      setLocalError("برای پیشنهاد راهنمای تصحیح، متن سؤال، پاسخ مورد انتظار و نمره را وارد کنید.");
       return;
     }
     try {
       const saved = await saveDraft(values);
       const result = await suggestRubric.mutateAsync();
+      if (!isRubricValue(result.rubric_ai_suggested)) {
+        setLocalError("پیشنهاد هوش مصنوعی ساختار معتبری ندارد. دوباره تلاش کنید.");
+        return;
+      }
       setSuggestions((current) => ({ ...current, [saved.id]: result.rubric_ai_suggested }));
       onQuestionHydrated({ ...saved, rubric_ai_suggested: result.rubric_ai_suggested });
     } catch (error) {
-      setLocalError(error instanceof Error ? error : new Error("دریافت پیشنهاد rubric ناموفق بود."));
+      setLocalError(getErrorMessage(error));
     }
+  }
+
+  function acceptActiveSuggestion() {
+    if (!isRubricValue(activeSuggestion)) {
+      setLocalError("پیشنهاد هوش مصنوعی ساختار معتبری ندارد و قابل استفاده نیست.");
+      return;
+    }
+    form.setValue("rubric", stringifyRubric(activeSuggestion), { shouldDirty: true, shouldValidate: true });
+    setAcceptRubricOpen(false);
+  }
+
+  function requestAcceptSuggestion() {
+    if (!isRubricValue(activeSuggestion)) {
+      setLocalError("پیشنهاد هوش مصنوعی ساختار معتبری ندارد و قابل استفاده نیست.");
+      return;
+    }
+    const currentRubric = form.getValues("rubric").trim();
+    const suggestedRubric = stringifyRubric(activeSuggestion);
+    if (currentRubric && currentRubric !== suggestedRubric) {
+      setAcceptRubricOpen(true);
+      return;
+    }
+    acceptActiveSuggestion();
   }
 
   function renderTypeFields() {
@@ -283,7 +339,7 @@ export function QuestionEditor({ classId, examId, question, editable, onQuestion
             <h2 className="text-lg font-semibold text-ink-900">
               سوال {question.order_index}، {typeLabels[question.type]}
             </h2>
-            <p className="mt-1 text-sm text-ink-500">وضعیت سوال: {question.status}</p>
+            <p className="mt-1 text-sm text-ink-500">وضعیت سؤال: {question.status === "confirmed" ? "تأییدشده" : question.status === "draft" ? "پیش‌نویس" : question.status === "empty" ? "ناقص" : "نیازمند بررسی"}</p>
           </div>
           {locked ? <span className="rounded-full bg-brand-50 px-3 py-1 text-xs font-medium text-brand-700">قفل شده</span> : null}
         </div>
@@ -292,7 +348,7 @@ export function QuestionEditor({ classId, examId, question, editable, onQuestion
         ) : null}
         <form className="mt-4 space-y-4" onSubmit={form.handleSubmit(saveDraft)}>
           <FormError message={updateQuestion.error ? getErrorMessage(updateQuestion.error) : null} />
-          {localError ? <Alert variant="error">{localError.message}</Alert> : null}
+          {localError ? <Alert variant="error">{localError}</Alert> : null}
           <label className="block space-y-1.5">
             <span className="text-sm font-medium text-ink-700">متن سوال</span>
             <Textarea {...form.register("text")} placeholder="متن سوال را دستی وارد کنید." disabled={locked} />
@@ -328,9 +384,19 @@ export function QuestionEditor({ classId, examId, question, editable, onQuestion
           error={suggestRubric.error}
           disabled={updateQuestion.isPending}
           onSuggest={form.handleSubmit(handleSuggest)}
-          onAccept={() => form.setValue("rubric", stringifyRubric(activeSuggestion), { shouldDirty: true })}
+          onAccept={requestAcceptSuggestion}
         />
       ) : null}
+
+      <ConfirmDialog
+        open={acceptRubricOpen}
+        title="جایگزینی راهنمای تصحیح"
+        description="استفاده از پیشنهاد جدید، تغییرهای فعلی شما در راهنمای تصحیح را جایگزین می‌کند."
+        confirmLabel="جایگزین کن"
+        cancelLabel="انصراف"
+        onConfirm={acceptActiveSuggestion}
+        onClose={() => setAcceptRubricOpen(false)}
+      />
     </div>
   );
 }

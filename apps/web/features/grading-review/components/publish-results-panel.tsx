@@ -6,6 +6,7 @@ import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { usePublishResults } from "@/features/grading-review/hooks";
+import { ReviewStatusBadge } from "@/features/grading-review/components/review-status-badge";
 import { getErrorMessage } from "@/lib/errors";
 import type { ExamReview } from "@/types/review";
 
@@ -27,12 +28,15 @@ export function PublishResultsPanel({ classId, examId, review }: PublishResultsP
         </p>
       </div>
       <Alert>ایمیل‌های نتیجه و لیدربورد، اگر فعال باشد، توسط backend صف‌بندی می‌شوند.</Alert>
-      <p className="text-sm text-ink-500">وضعیت فعلی آزمون: {review.exam.status}</p>
+      <div className="flex items-center gap-2 text-sm text-ink-500">
+        <span>وضعیت فعلی آزمون:</span>
+        <ReviewStatusBadge status={review.exam.status} />
+      </div>
       {publish.error ? <Alert variant="error">{getErrorMessage(publish.error)}</Alert> : null}
       {publish.data ? (
         <Alert variant="success">
-          انتشار انجام شد. وضعیت: {publish.data.status}، توکن‌های نتیجه ساخته‌شده:{" "}
-          {publish.data.created_result_tokens}، ایمیل‌های صف‌شده: {publish.data.queued_result_emails}، لیدربورد:{" "}
+          انتشار انجام شد. لینک‌های نتیجه ساخته‌شده: {publish.data.created_result_tokens}، ایمیل‌های صف‌شده:{" "}
+          {publish.data.queued_result_emails}، لیدربورد:{" "}
           {publish.data.leaderboard_enabled ? "فعال" : "غیرفعال"}
         </Alert>
       ) : null}

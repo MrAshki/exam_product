@@ -103,9 +103,15 @@ function AnswerContext({ answer }: { answer: AppealAnswer | null }) {
         </div>
       </dl>
       {answer.ai_feedback ? (
-        <div className="rounded-md border border-slate-200 p-3">
-          <p className="text-xs font-medium text-ink-500">بازخورد</p>
+        <div className="rounded-md border border-blue-100 bg-blue-50 p-3">
+          <p className="text-xs font-medium text-blue-800">ارزیابی خودکار</p>
           <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-ink-800">{answer.ai_feedback}</p>
+        </div>
+      ) : null}
+      {answer.teacher_feedback ? (
+        <div className="rounded-md border border-brand-100 bg-brand-50 p-3">
+          <p className="text-xs font-medium text-brand-700">بازخورد معلم</p>
+          <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-brand-950">{answer.teacher_feedback}</p>
         </div>
       ) : null}
     </Card>

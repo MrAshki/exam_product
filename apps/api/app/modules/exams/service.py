@@ -11,6 +11,7 @@ from app.core.config import settings
 from app.modules.auth.models import User
 from app.modules.exams.errors import (
     blueprint_not_found,
+    blueprint_update_requires_confirmation,
     class_not_found,
     email_send_failed,
     exam_already_draft,
@@ -380,6 +381,31 @@ class ExamService:
         if blueprint is None:
             raise blueprint_not_found()
 
+        if self._blueprint_counts_match(blueprint, payload):
+            return blueprint
+
+        existing_questions = self.repository.list_questions_for_exam(exam.id, class_id, teacher.id)
+        existing_options = self.repository.list_options_for_exam(exam.id, class_id, teacher.id)
+        question_ids_with_options = {option.question_id for option in existing_options}
+        completed_question_count = sum(
+            1
+            for question in existing_questions
+            if self._question_has_content(question) or question.id in question_ids_with_options
+        )
+        confirmed_question_count = sum(
+            1
+            for question in existing_questions
+            if question.teacher_confirmed or question.status == QuestionStatus.CONFIRMED.value
+        )
+        if completed_question_count > 0 and not payload.confirm_destructive_update:
+            raise blueprint_update_requires_confirmation(
+                {
+                    "completed_question_count": completed_question_count,
+                    "confirmed_question_count": confirmed_question_count,
+                    "affected_question_slot_count": len(existing_questions),
+                }
+            )
+
         self._apply_blueprint_counts(blueprint, payload)
         questions = self._build_question_slots(class_id, exam_id, teacher, payload)
 
@@ -388,6 +414,15 @@ class ExamService:
         except IntegrityError:
             self.repository.rollback()
             raise exam_already_has_blueprint() from None
+
+    @staticmethod
+    def _blueprint_counts_match(blueprint: ExamBlueprint, payload: BlueprintUpdate) -> bool:
+        return (
+            blueprint.multiple_choice_count == payload.multiple_choice_count
+            and blueprint.short_answer_count == payload.short_answer_count
+            and blueprint.essay_count == payload.essay_count
+            and blueprint.true_false_count == payload.true_false_count
+        )
 
     def _ensure_class_owned(self, class_id: UUID, teacher: User) -> None:
         classroom = self.repository.get_class_for_teacher(class_id, teacher.id)

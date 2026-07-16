@@ -8,8 +8,9 @@ from uuid import UUID
 from sqlalchemy.exc import SQLAlchemyError
 
 from app.modules.auth.models import User
-from app.modules.exams.status import ExamStatus
+from app.modules.exams.status import ExamStatus, QuestionType
 from app.modules.grading import errors
+from app.modules.grading.feedback import safe_ai_feedback
 from app.modules.grading.repository import ReviewRepository
 from app.modules.grading.schemas import AnswerReviewRequest
 from app.modules.questions.models import Question
@@ -126,8 +127,8 @@ class ReviewService:
         answer.final_score = payload.teacher_score
         answer.reviewed_by_teacher = True
         answer.needs_review = False
-        if payload.feedback is not None:
-            answer.ai_feedback = payload.feedback
+        if "teacher_feedback" in payload.model_fields_set:
+            answer.teacher_feedback = payload.teacher_feedback
 
         try:
             if old_score != payload.teacher_score:
@@ -148,6 +149,7 @@ class ReviewService:
             "answer_id": answer.id,
             "submission_id": submission.id,
             "teacher_score": answer.teacher_score,
+            "teacher_feedback": answer.teacher_feedback,
             "final_score": answer.final_score,
             "reviewed_by_teacher": answer.reviewed_by_teacher,
             "needs_review": answer.needs_review,
@@ -241,6 +243,8 @@ class ReviewService:
 
     @staticmethod
     def _answer_payload(answer: Answer, question: Question) -> dict:
+        grading_method = ReviewService._grading_method(answer, question)
+        score_source = ReviewService._score_source(answer)
         return {
             "answer_id": answer.id,
             "question_id": question.id,
@@ -257,8 +261,32 @@ class ReviewService:
             "teacher_score": answer.teacher_score,
             "final_score": answer.final_score,
             "max_score": answer.max_score,
-            "ai_feedback": answer.ai_feedback,
+            "ai_feedback": safe_ai_feedback(answer.ai_feedback),
+            "teacher_feedback": answer.teacher_feedback,
             "ai_confidence": answer.ai_confidence,
+            "review_reason_code": answer.review_reason_code,
+            "grading_method": grading_method,
+            "score_source": score_source,
             "needs_review": answer.needs_review,
             "reviewed_by_teacher": answer.reviewed_by_teacher,
         }
+
+    @staticmethod
+    def _grading_method(answer: Answer, question: Question) -> str:
+        if question.type in {QuestionType.MULTIPLE_CHOICE.value, QuestionType.TRUE_FALSE.value}:
+            return "deterministic"
+        if question.type in {QuestionType.SHORT_ANSWER.value, QuestionType.ESSAY.value}:
+            return "ai"
+        if answer.teacher_score is not None:
+            return "manual"
+        return "unknown"
+
+    @staticmethod
+    def _score_source(answer: Answer) -> str:
+        if answer.teacher_score is not None:
+            return "teacher_override"
+        if answer.auto_score is not None:
+            return "automatic"
+        if answer.final_score is not None:
+            return "final"
+        return "unknown"

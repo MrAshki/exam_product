@@ -62,7 +62,7 @@ function ScheduleContent() {
       <PageHeader
         title="زمان‌بندی آزمون"
         description={exam.data ? exam.data.title : "ثبت بازه زمانی و ارسال دعوت‌نامه"}
-        action={<Badge>{exam.data ? examStatusLabels[exam.data.status] ?? exam.data.status : "—"}</Badge>}
+        action={<Badge>{exam.data ? examStatusLabels[exam.data.status] ?? "وضعیت نامشخص" : "در حال دریافت"}</Badge>}
       />
       <div className="flex flex-wrap gap-2">
         <Link href={routes.examBuilder(classId, examId)}>

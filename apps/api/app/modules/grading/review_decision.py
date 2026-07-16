@@ -19,7 +19,11 @@ from app.modules.notifications.models import EmailLog
 from app.modules.notifications.service import NotificationService
 from app.modules.questions.models import Question
 from app.modules.submissions.models import Answer, Submission
-from app.modules.submissions.status import SubmissionStatus
+from app.modules.submissions.status import (
+    TEACHER_CONTROLLED_SUBMISSION_STATUSES,
+    SubmissionStatus,
+    apply_grading_status_transition,
+)
 
 
 class ReviewDecisionService:
@@ -37,6 +41,13 @@ class ReviewDecisionService:
         SubmissionStatus.TEACHER_REVIEWED.value,
         SubmissionStatus.APPROVED.value,
         SubmissionStatus.PUBLISHED.value,
+    }
+    TERMINAL_EXAM_STATUSES = {
+        ExamStatus.APPROVED.value,
+        ExamStatus.PUBLISHED.value,
+    }
+    TERMINAL_SUBMISSION_STATUSES = {
+        *TEACHER_CONTROLLED_SUBMISSION_STATUSES,
     }
 
     def __init__(self, db: Session) -> None:
@@ -115,6 +126,14 @@ class ReviewDecisionService:
                 )
             ).all()
         )
+        if exam.status in self.TERMINAL_EXAM_STATUSES:
+            return {
+                "exam_id": str(exam.id),
+                "exam_status": exam.status,
+                "submitted_count": len(submissions),
+                "email_queued": False,
+            }
+
         if not submissions:
             return {
                 "exam_id": str(exam.id),
@@ -219,15 +238,17 @@ class ReviewDecisionService:
             Decimal("0"),
         )
         submission.needs_review_count = sum(1 for answer in answers if answer.needs_review)
+        if submission.status in ReviewDecisionService.TERMINAL_SUBMISSION_STATUSES:
+            return
 
         if submission.needs_review_count > 0:
-            submission.status = SubmissionStatus.NEEDS_REVIEW.value
+            submission.status = apply_grading_status_transition(submission.status, SubmissionStatus.NEEDS_REVIEW)
             return
 
         has_all_confirmed_answers = confirmed_question_ids.issubset(answered_question_ids)
         all_answers_scored = bool(answers) and all(answer.final_score is not None for answer in answers)
         if questions and has_all_confirmed_answers and all_answers_scored:
-            submission.status = SubmissionStatus.AUTO_GRADED.value
+            submission.status = apply_grading_status_transition(submission.status, SubmissionStatus.AUTO_GRADED)
             return
 
         if submission.status in {
@@ -235,7 +256,7 @@ class ReviewDecisionService:
             SubmissionStatus.AUTO_GRADED.value,
             SubmissionStatus.NEEDS_REVIEW.value,
         }:
-            submission.status = SubmissionStatus.SUBMITTED.value
+            submission.status = apply_grading_status_transition(submission.status, SubmissionStatus.SUBMITTED)
 
     def _teacher_review_ready_email_exists(self, exam_id: UUID) -> bool:
         email_log = self.db.scalar(

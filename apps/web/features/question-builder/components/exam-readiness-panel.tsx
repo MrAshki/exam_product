@@ -30,6 +30,35 @@ type ExamReadinessPanelProps = {
   onSelectQuestion?: (questionId?: string | null, orderIndex?: number | null) => void;
 };
 
+const readinessFailureMessages: Record<string, string> = {
+  BLUEPRINT_MISSING: "ساختار آزمون هنوز ساخته نشده است.",
+  BLUEPRINT_COUNT_MISMATCH: "تعداد سؤال‌ها با ساختار آزمون برابر نیست.",
+  BLUEPRINT_TYPE_MISMATCH: "تعداد انواع سؤال‌ها با ساختار آزمون هماهنگ نیست.",
+  QUESTION_EMPTY: "اطلاعات سؤال کامل نیست.",
+  QUESTION_TEXT_REQUIRED: "متن سؤال را وارد کنید.",
+  QUESTION_POINTS_INVALID: "بارم سؤال باید بیشتر از صفر باشد.",
+  INVALID_CORRECT_OPTION: "پاسخ درست سؤال را به‌درستی مشخص کنید.",
+  INVALID_QUESTION_OPTIONS: "گزینه‌های سؤال را کامل و پاسخ درست را مشخص کنید.",
+  EXPECTED_ANSWER_REQUIRED: "پاسخ مورد انتظار را وارد کنید.",
+  RUBRIC_REQUIRED: "راهنمای تصحیح سؤال تشریحی را وارد کنید.",
+  RUBRIC_NOT_CONFIRMED: "راهنمای تصحیح باید توسط معلم تأیید شود.",
+  QUESTION_NEEDS_REVIEW: "این سؤال هنوز به بررسی معلم نیاز دارد.",
+  POINTS_TOTAL_MISMATCH: "مجموع بارم سؤال‌ها با نمره کل آزمون برابر نیست.",
+  EXAM_NOT_DRAFT: "آزمون برای ویرایش باید در وضعیت پیش‌نویس باشد."
+};
+
+const reopenBlockMessages: Record<string, string> = {
+  EXAM_HAS_SUBMISSIONS: "برای این آزمون پاسخ ثبت شده و تغییر نسخه اصلی آن مجاز نیست.",
+  EXAM_ALREADY_DRAFT: "آزمون در حال حاضر پیش‌نویس است.",
+  EXAM_HAS_TOKENS: "برای این آزمون لینک فعال وجود دارد و بازگشایی مستقیم مجاز نیست.",
+  EXAM_SCHEDULE_INVALID: "زمان‌بندی آزمون معتبر نیست و بازگشایی امن ممکن نیست.",
+  EXAM_IN_PROGRESS: "آزمون در حال برگزاری است و اکنون قابل بازگشایی نیست."
+};
+
+function readinessFailureMessage(failure: ExamReadinessFailure) {
+  return readinessFailureMessages[failure.code] ?? "بخشی از اطلاعات آزمون نیازمند اصلاح است.";
+}
+
 export function ExamReadinessPanel({
   classId,
   exam,
@@ -109,7 +138,7 @@ export function ExamReadinessPanel({
                       key={`exam-${failure.message}-${index}`}
                       className="rounded-md border border-slate-200 bg-white p-3 text-sm text-ink-700"
                     >
-                      {failure.message}
+                      {readinessFailureMessage(failure)}
                     </div>
                   ))}
                 </div>
@@ -135,7 +164,7 @@ export function ExamReadinessPanel({
           ) : null}
           {!readiness.reopen_allowed && readiness.reopen_block_message && exam?.status !== "draft" ? (
             <Alert variant={readiness.is_in_progress || readiness.has_submissions ? "error" : "info"}>
-              {readiness.reopen_block_message}
+              {reopenBlockMessages[readiness.reopen_block_code ?? ""] ?? "این آزمون در وضعیت فعلی قابل بازگشایی نیست."}
               {exam?.status === "scheduled" && exam.start_time && exam.end_time ? (
                 <span className="mt-2 block text-xs text-ink-500">
                   بازه آزمون: {new Date(exam.start_time).toLocaleString("fa-IR")} تا {new Date(exam.end_time).toLocaleString("fa-IR")}
@@ -210,8 +239,9 @@ function groupFailures(failures: ExamReadinessFailure[]) {
       orderIndex: failure.order_index,
       messages: []
     };
-    if (!group.messages.includes(failure.message)) {
-      group.messages.push(failure.message);
+    const message = readinessFailureMessage(failure);
+    if (!group.messages.includes(message)) {
+      group.messages.push(message);
     }
     groups.set(key, group);
   }

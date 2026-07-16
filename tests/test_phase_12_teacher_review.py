@@ -18,10 +18,11 @@ from app.modules.classrooms.models import Classroom
 from app.modules.exams.models import Exam, ExamBlueprint, ExamToken
 from app.modules.exams.status import ExamStatus, QuestionStatus, QuestionType
 from app.modules.grading.models import GradeChangeLog
+from app.modules.grading.review_service import ReviewService
 from app.modules.questions.models import Question
 from app.modules.students.models import ClassStudent, Student
 from app.modules.submissions.models import Answer, Submission
-from app.modules.submissions.status import SubmissionStatus
+from app.modules.submissions.status import ReviewReasonCode, SubmissionStatus
 
 
 client = TestClient(app)
@@ -173,6 +174,7 @@ def _create_review_context(
         max_score=Decimal("4.00"),
         ai_feedback="Partially correct.",
         ai_confidence=Decimal("0.670"),
+        review_reason_code=ReviewReasonCode.AI_LOW_CONFIDENCE.value if answer_needs_review else None,
         needs_review=answer_needs_review,
         reviewed_by_teacher=False,
     )
@@ -292,7 +294,11 @@ def test_review_endpoint_returns_summary_submissions_and_teacher_answer_details(
     assert answer["expected_answer"] == "Variables represent unknown or changing values."
     assert answer["grading_instructions"] == "Award partial credit."
     assert answer["ai_feedback"] == "Partially correct."
+    assert answer["teacher_feedback"] is None
     assert answer["ai_confidence"] == "0.670"
+    assert answer["review_reason_code"] == ReviewReasonCode.AI_LOW_CONFIDENCE.value
+    assert answer["grading_method"] == "ai"
+    assert answer["score_source"] == "automatic"
 
 
 def test_review_endpoint_excludes_deleted_submissions_and_answers() -> None:
@@ -317,6 +323,37 @@ def test_review_endpoint_excludes_deleted_submissions_and_answers() -> None:
     assert len(submissions[0]["answers"]) == 1
 
 
+def test_review_endpoint_keeps_legacy_null_review_reason_readable() -> None:
+    with SessionLocal() as db:
+        context = _create_review_context(db, answer_needs_review=True)
+        answer = db.get(Answer, context["answer_id"])
+        answer.review_reason_code = None
+        db.add(answer)
+        db.commit()
+
+    response = client.get(_review_url(context), cookies=context["cookies"])
+    answer_data = response.json()["data"]["submissions"][0]["answers"][0]
+
+    assert response.status_code == 200
+    assert answer_data["needs_review"] is True
+    assert answer_data["review_reason_code"] is None
+
+
+def test_review_provenance_derives_deterministic_and_teacher_override_sources() -> None:
+    question = Question(type=QuestionType.MULTIPLE_CHOICE.value)
+    automatic_answer = Answer(auto_score=Decimal("2.00"), final_score=Decimal("2.00"))
+    overridden_answer = Answer(
+        auto_score=Decimal("2.00"),
+        teacher_score=Decimal("1.50"),
+        final_score=Decimal("1.50"),
+    )
+
+    assert ReviewService._grading_method(automatic_answer, question) == "deterministic"
+    assert ReviewService._score_source(automatic_answer) == "automatic"
+    assert ReviewService._grading_method(overridden_answer, question) == "deterministic"
+    assert ReviewService._score_source(overridden_answer) == "teacher_override"
+
+
 def test_review_answer_updates_scores_flags_feedback_totals_and_grade_change_log() -> None:
     with SessionLocal() as db:
         context = _create_review_context(db)
@@ -326,7 +363,7 @@ def test_review_answer_updates_scores_flags_feedback_totals_and_grade_change_log
         cookies=context["cookies"],
         json={
             "teacher_score": "3.50",
-            "feedback": "Good answer, but missing one key detail.",
+            "teacher_feedback": "Good answer, but missing one key detail.",
             "reason": "Adjusted after manual review.",
         },
     )
@@ -345,7 +382,9 @@ def test_review_answer_updates_scores_flags_feedback_totals_and_grade_change_log
     assert data["submission_total_score"] == "9.50"
     assert data["submission_max_score"] == "10.00"
     assert data["submission_needs_review_count"] == 0
-    assert answer.ai_feedback == "Good answer, but missing one key detail."
+    assert data["teacher_feedback"] == "Good answer, but missing one key detail."
+    assert answer.ai_feedback == "Partially correct."
+    assert answer.teacher_feedback == "Good answer, but missing one key detail."
     assert submission.status == SubmissionStatus.TEACHER_REVIEWED.value
     assert len(logs) == 1
     assert logs[0].old_score == Decimal("2.50")

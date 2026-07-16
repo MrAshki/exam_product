@@ -13,13 +13,14 @@ from app.modules.ai.service import AIService
 from app.modules.classrooms.models import Classroom
 from app.modules.exams.models import Exam
 from app.modules.exams.status import QuestionStatus, QuestionType
+from app.modules.grading.feedback import normalize_feedback
 from app.modules.grading.review_decision import ReviewDecisionService
 from app.modules.jobs.models import JobLog
 from app.modules.jobs.status import JobStatus
 from app.modules.questions.models import Question
 from app.modules.students.models import Student
 from app.modules.submissions.models import Answer, Submission
-from app.modules.submissions.status import SubmissionStatus
+from app.modules.submissions.status import ReviewReasonCode, SubmissionStatus, apply_grading_status_transition
 
 
 class DeterministicGradingWorkerService:
@@ -145,10 +146,11 @@ class DeterministicGradingWorkerService:
             answer.max_score = Decimal(question.points)
             if answer.teacher_score is None:
                 answer.final_score = calculated_score
+                answer.reviewed_by_teacher = False
             elif answer.final_score is None:
                 answer.final_score = answer.teacher_score
             answer.needs_review = False
-            answer.reviewed_by_teacher = False
+            answer.review_reason_code = None
             db.add(answer)
             objective_count += 1
 
@@ -160,7 +162,7 @@ class DeterministicGradingWorkerService:
             question.type in {QuestionType.MULTIPLE_CHOICE.value, QuestionType.TRUE_FALSE.value}
             for question in questions
         ):
-            submission.status = SubmissionStatus.AUTO_GRADED.value
+            submission.status = apply_grading_status_transition(submission.status, SubmissionStatus.AUTO_GRADED)
         db.add(submission)
         db.commit()
         review_result = ReviewDecisionService(db).evaluate_submission(
@@ -393,6 +395,17 @@ class AIGradingWorkerService:
             if question.type not in self.SUBJECTIVE_TYPES:
                 continue
 
+            if self._has_missing_grading_data(question):
+                answer.ai_feedback = None
+                answer.ai_confidence = None
+                if answer.teacher_score is None:
+                    answer.needs_review = True
+                    answer.review_reason_code = ReviewReasonCode.MISSING_GRADING_DATA.value
+                    answer.reviewed_by_teacher = False
+                failed_count += 1
+                db.add(answer)
+                continue
+
             task_name = self._task_name_for_question(question)
             try:
                 result = ai_service.grade_subjective_answer(
@@ -424,17 +437,26 @@ class AIGradingWorkerService:
                     answer.final_score = result["score"]
                 elif answer.final_score is None:
                     answer.final_score = answer.teacher_score
-                answer.ai_feedback = result["feedback"]
+                answer.ai_feedback = normalize_feedback(result["feedback"])
                 answer.ai_confidence = confidence
-                answer.needs_review = needs_review
-                answer.reviewed_by_teacher = False
+                if answer.teacher_score is None:
+                    answer.needs_review = needs_review
+                    if confidence is None or confidence < Decimal(str(AI_GRADING_REVIEW_CONFIDENCE_THRESHOLD)):
+                        answer.review_reason_code = ReviewReasonCode.AI_LOW_CONFIDENCE.value
+                    elif needs_review:
+                        answer.review_reason_code = ReviewReasonCode.POLICY_REQUIRES_TEACHER.value
+                    else:
+                        answer.review_reason_code = None
+                    answer.reviewed_by_teacher = False
                 graded_count += 1
             except Exception:
                 answer.max_score = Decimal(question.points)
-                answer.ai_feedback = "AI grading failed. Teacher review required."
+                answer.ai_feedback = None
                 answer.ai_confidence = None
-                answer.needs_review = True
-                answer.reviewed_by_teacher = False
+                if answer.teacher_score is None:
+                    answer.needs_review = True
+                    answer.review_reason_code = ReviewReasonCode.AI_UNAVAILABLE.value
+                    answer.reviewed_by_teacher = False
                 failed_count += 1
             db.add(answer)
 
@@ -507,6 +529,13 @@ class AIGradingWorkerService:
         return ""
 
     @staticmethod
+    def _has_missing_grading_data(question: Question) -> bool:
+        expected_answer = question.expected_answer or question.correct_answer
+        if not question.text or not expected_answer or Decimal(question.points) <= Decimal("0"):
+            return True
+        return question.type == QuestionType.ESSAY.value and not question.rubric
+
+    @staticmethod
     def _update_submission_after_ai_grading(
         submission: Submission,
         answers: list[Answer],
@@ -522,8 +551,8 @@ class AIGradingWorkerService:
             submission.ai_confidence_avg = sum(confidences, Decimal("0")) / Decimal(len(confidences))
 
         if submission.needs_review_count > 0:
-            submission.status = SubmissionStatus.NEEDS_REVIEW.value
+            submission.status = apply_grading_status_transition(submission.status, SubmissionStatus.NEEDS_REVIEW)
         elif answers and all(answer.final_score is not None for answer in answers):
-            submission.status = SubmissionStatus.AUTO_GRADED.value
+            submission.status = apply_grading_status_transition(submission.status, SubmissionStatus.AUTO_GRADED)
         else:
-            submission.status = SubmissionStatus.SUBMITTED.value
+            submission.status = apply_grading_status_transition(submission.status, SubmissionStatus.SUBMITTED)

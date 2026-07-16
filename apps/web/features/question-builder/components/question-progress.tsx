@@ -30,7 +30,7 @@ export function QuestionProgress({ exam, questions, readiness }: QuestionProgres
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="text-lg font-semibold text-ink-900">{exam?.title || "آزمون"}</h2>
-          <p className="mt-1 text-sm text-ink-500">وضعیت: {exam ? statusLabels[exam.status] ?? exam.status : "—"}</p>
+          <p className="mt-1 text-sm text-ink-500">وضعیت: {exam ? statusLabels[exam.status] ?? "وضعیت نامشخص" : "در حال دریافت"}</p>
         </div>
         <Badge>{percent}% تکمیل</Badge>
       </div>

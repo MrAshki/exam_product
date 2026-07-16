@@ -78,6 +78,7 @@ class AppealAnswerRead(BaseModel):
     current_score: str | None
     max_score: str | None
     ai_feedback: str | None
+    teacher_feedback: str | None
     ai_confidence: str | None
 
 

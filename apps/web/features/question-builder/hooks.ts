@@ -15,7 +15,7 @@ import {
   updateQuestion
 } from "@/features/question-builder/api";
 import { examQueryKeys } from "@/features/exams/hooks";
-import type { BlueprintPayload } from "@/types/blueprint";
+import type { BlueprintPayload, BlueprintUpdatePayload } from "@/types/blueprint";
 import type { QuestionUpdatePayload } from "@/types/question";
 
 export const builderQueryKeys = {
@@ -92,7 +92,7 @@ export function useUpdateBlueprint(classId: string, examId: string) {
   const invalidate = useInvalidateBuilder(classId, examId);
 
   return useMutation({
-    mutationFn: (payload: BlueprintPayload) => updateBlueprint(classId, examId, payload),
+    mutationFn: (payload: BlueprintUpdatePayload) => updateBlueprint(classId, examId, payload),
     onSuccess: invalidate
   });
 }

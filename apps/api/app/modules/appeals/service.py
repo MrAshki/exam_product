@@ -16,6 +16,7 @@ from app.modules.appeals.schemas import AppealCreate, AppealResolveRequest
 from app.modules.appeals.status import AppealStatus
 from app.modules.auth.models import User
 from app.modules.exams.status import ExamStatus
+from app.modules.grading.feedback import safe_ai_feedback
 from app.modules.jobs.models import JobLog
 from app.modules.jobs.status import EMAIL_QUEUE, LEADERBOARD_QUEUE, JobStatus, JobType
 from app.modules.notifications.constants import EmailType
@@ -383,7 +384,8 @@ class AppealService:
             "expected_answer": question.expected_answer,
             "current_score": AppealService._decimal_to_string(answer.final_score),
             "max_score": AppealService._decimal_to_string(answer.max_score),
-            "ai_feedback": answer.ai_feedback,
+            "ai_feedback": safe_ai_feedback(answer.ai_feedback),
+            "teacher_feedback": answer.teacher_feedback,
             "ai_confidence": AppealService._decimal_to_string(answer.ai_confidence),
         }
 

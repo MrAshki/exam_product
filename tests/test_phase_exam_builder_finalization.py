@@ -14,7 +14,7 @@ from app.modules.auth.models import User
 from app.modules.classrooms.models import Classroom
 from app.modules.exams.errors import ExamErrorCode
 from app.modules.exams.models import Exam, ExamBlueprint, ExamToken
-from app.modules.exams.schemas import ExamScheduleRequest
+from app.modules.exams.schemas import BlueprintUpdate, ExamScheduleRequest
 from app.modules.exams.service import ExamService
 from app.modules.exams.status import ExamStatus, QuestionStatus, QuestionType
 from app.modules.questions.models import Question, QuestionOption
@@ -473,3 +473,113 @@ def test_decimal_objective_grading_awards_decimal_points() -> None:
     score = DeterministicGradingWorkerService._score_objective_answer(question, answer)
 
     assert score == Decimal("2.50")
+
+
+def _create_empty_blueprint_exam(db, teacher: User, classroom: Classroom) -> tuple[Exam, Question]:
+    exam = Exam(
+        teacher_id=teacher.id,
+        class_id=classroom.id,
+        title=f"Empty Blueprint Exam {uuid.uuid4().hex[:8]}",
+        total_points=0,
+        status=ExamStatus.DRAFT.value,
+    )
+    db.add(exam)
+    db.flush()
+    blueprint = ExamBlueprint(
+        teacher_id=teacher.id,
+        class_id=classroom.id,
+        exam_id=exam.id,
+        multiple_choice_count=1,
+        total_question_count=1,
+    )
+    question = Question(
+        teacher_id=teacher.id,
+        class_id=classroom.id,
+        exam_id=exam.id,
+        type=QuestionType.MULTIPLE_CHOICE.value,
+        order_index=1,
+    )
+    db.add_all([blueprint, question])
+    db.commit()
+    db.refresh(exam)
+    db.refresh(question)
+    return exam, question
+
+
+def test_harmless_blueprint_update_without_content_needs_no_confirmation() -> None:
+    _require_db()
+    with SessionLocal() as db:
+        teacher = _create_teacher(db)
+        classroom = _create_classroom(db, teacher)
+        exam, old_question = _create_empty_blueprint_exam(db, teacher, classroom)
+
+        updated = ExamService(db).update_blueprint(
+            classroom.id,
+            exam.id,
+            BlueprintUpdate(true_false_count=1),
+            teacher,
+        )
+        questions = ExamService(db).repository.list_questions_for_exam(exam.id, classroom.id, teacher.id)
+        db.refresh(old_question)
+
+    assert updated.true_false_count == 1
+    assert old_question.deleted_at is not None
+    assert len(questions) == 1
+    assert questions[0].type == QuestionType.TRUE_FALSE.value
+
+
+def test_destructive_blueprint_update_is_rejected_without_confirmation() -> None:
+    _require_db()
+    with SessionLocal() as db:
+        teacher = _create_teacher(db)
+        classroom = _create_classroom(db, teacher)
+        exam, question = _create_ready_exam(db, teacher, classroom)
+        question.teacher_confirmed = True
+        question.status = QuestionStatus.CONFIRMED.value
+        db.add(question)
+        db.commit()
+
+        with pytest.raises(AppException) as exc_info:
+            ExamService(db).update_blueprint(
+                classroom.id,
+                exam.id,
+                BlueprintUpdate(true_false_count=1),
+                teacher,
+            )
+        db.refresh(question)
+
+    assert exc_info.value.code == ExamErrorCode.BLUEPRINT_UPDATE_REQUIRES_CONFIRMATION
+    assert exc_info.value.details == {
+        "completed_question_count": 1,
+        "confirmed_question_count": 1,
+        "affected_question_slot_count": 1,
+    }
+    assert question.deleted_at is None
+
+
+def test_confirmed_destructive_blueprint_update_is_scoped_to_selected_exam() -> None:
+    _require_db()
+    with SessionLocal() as db:
+        teacher = _create_teacher(db)
+        classroom = _create_classroom(db, teacher)
+        exam, old_question = _create_ready_exam(db, teacher, classroom)
+        unrelated_exam, unrelated_question = _create_ready_exam(db, teacher, classroom)
+        exam_id = exam.id
+        unrelated_exam_id = unrelated_exam.id
+
+        ExamService(db).update_blueprint(
+            classroom.id,
+            exam.id,
+            BlueprintUpdate(true_false_count=1, confirm_destructive_update=True),
+            teacher,
+        )
+        updated_questions = ExamService(db).repository.list_questions_for_exam(exam.id, classroom.id, teacher.id)
+        db.refresh(old_question)
+        db.refresh(unrelated_question)
+
+    assert old_question.deleted_at is not None
+    assert len(updated_questions) == 1
+    assert updated_questions[0].type == QuestionType.TRUE_FALSE.value
+    assert updated_questions[0].exam_id == exam_id
+    assert unrelated_question.deleted_at is None
+    assert unrelated_question.exam_id == unrelated_exam_id

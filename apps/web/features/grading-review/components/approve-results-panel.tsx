@@ -6,6 +6,7 @@ import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { useApproveResults } from "@/features/grading-review/hooks";
+import { ReviewStatusBadge } from "@/features/grading-review/components/review-status-badge";
 import { getErrorMessage } from "@/lib/errors";
 import type { ExamReview } from "@/types/review";
 
@@ -24,8 +25,10 @@ export function ApproveResultsPanel({ classId, examId, review }: ApproveResultsP
         <h2 className="text-lg font-semibold text-ink-900">تأیید نتایج</h2>
         <p className="mt-1 text-sm leading-6 text-ink-500">بعد از تأیید، نتایج برای انتشار آماده می‌شوند.</p>
       </div>
-      <Alert>
-        وضعیت فعلی آزمون: {review.exam.status}. پاسخ‌های نیازمند بازبینی: {review.summary.needs_review_answer_count}
+      <Alert className="flex flex-wrap items-center gap-2">
+        <span>وضعیت فعلی آزمون:</span>
+        <ReviewStatusBadge status={review.exam.status} />
+        <span>پاسخ‌های نیازمند بازبینی: {review.summary.needs_review_answer_count}</span>
       </Alert>
       {approve.error ? <Alert variant="error">{getErrorMessage(approve.error)}</Alert> : null}
       {approve.data ? (

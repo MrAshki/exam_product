@@ -24,7 +24,11 @@ export type ReviewAnswer = {
   final_score: string | number | null;
   max_score: string | number | null;
   ai_feedback: string | null;
+  teacher_feedback: string | null;
   ai_confidence: string | number | null;
+  review_reason_code: string | null;
+  grading_method: "deterministic" | "ai" | "manual" | "unknown";
+  score_source: "automatic" | "teacher_override" | "final" | "unknown";
   needs_review: boolean;
   reviewed_by_teacher: boolean;
 };
@@ -48,7 +52,7 @@ export type ExamReview = {
 
 export type AnswerReviewPayload = {
   teacher_score: string | number;
-  feedback?: string | null;
+  teacher_feedback?: string | null;
   reason?: string | null;
 };
 
@@ -56,6 +60,7 @@ export type AnswerReviewResult = {
   answer_id: string;
   submission_id: string;
   teacher_score: string | number;
+  teacher_feedback: string | null;
   final_score: string | number;
   reviewed_by_teacher: boolean;
   needs_review: boolean;

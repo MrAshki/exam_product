@@ -49,7 +49,7 @@ export function ResultAnswerCard({ answer, index }: ResultAnswerCardProps) {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-2">
           <Badge>سوال {index + 1}</Badge>
-          <Badge>{typeLabels[answer.question_type] ?? answer.question_type}</Badge>
+          <Badge>{typeLabels[answer.question_type] ?? "نوع سؤال نامشخص"}</Badge>
         </div>
         <span className="text-sm font-medium text-ink-700">
           {answer.final_score ?? "—"} / {answer.max_score ?? "—"}

@@ -140,7 +140,9 @@ class Answer(BaseModelMixin, Base):
     final_score: Mapped[Decimal | None] = mapped_column(Numeric(8, 2), nullable=True)
     max_score: Mapped[Decimal | None] = mapped_column(Numeric(8, 2), nullable=True)
     ai_feedback: Mapped[str | None] = mapped_column(Text, nullable=True)
+    teacher_feedback: Mapped[str | None] = mapped_column(Text, nullable=True)
     ai_confidence: Mapped[Decimal | None] = mapped_column(Numeric(4, 3), nullable=True)
+    review_reason_code: Mapped[str | None] = mapped_column(String(50), nullable=True)
     needs_review: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default=text("false"))
     reviewed_by_teacher: Mapped[bool] = mapped_column(
         Boolean,
@@ -156,4 +158,3 @@ class Answer(BaseModelMixin, Base):
     student = relationship("Student")
     submission = relationship("Submission")
     question = relationship("Question")
-

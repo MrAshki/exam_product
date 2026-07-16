@@ -154,6 +154,15 @@ def test_answers_table_exists_after_migration() -> None:
     assert inspect(engine).has_table("answers")
 
 
+def test_answers_has_separate_teacher_feedback_and_review_reason_columns() -> None:
+    _require_db()
+    columns = {column["name"]: column for column in inspect(engine).get_columns("answers")}
+
+    assert columns["teacher_feedback"]["nullable"] is True
+    assert columns["review_reason_code"]["nullable"] is True
+    assert columns["review_reason_code"]["type"].length == 50
+
+
 def test_submissions_has_required_indexes() -> None:
     _require_db()
     index_names = {index["name"] for index in inspect(engine).get_indexes("submissions")}

@@ -18,3 +18,7 @@ export type BlueprintPayload = {
   essay_count: number;
   true_false_count: number;
 };
+
+export type BlueprintUpdatePayload = BlueprintPayload & {
+  confirm_destructive_update?: boolean;
+};

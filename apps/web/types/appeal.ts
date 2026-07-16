@@ -39,6 +39,7 @@ export type AppealAnswer = {
   current_score: string | null;
   max_score: string | null;
   ai_feedback: string | null;
+  teacher_feedback: string | null;
   ai_confidence: string | null;
 };
 

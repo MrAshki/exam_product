@@ -6,6 +6,7 @@ from decimal import Decimal
 
 from sqlalchemy import select
 
+from app.core.config import settings
 from app.modules.ai.gateway import ModelGateway
 from app.modules.ai.logs import AILog
 from app.modules.auth.models import User
@@ -17,9 +18,9 @@ from app.modules.jobs.status import AI_GRADING_QUEUE, DETERMINISTIC_GRADING_QUEU
 from app.modules.questions.models import Question
 from app.modules.students.models import ClassStudent, Student
 from app.modules.submissions.models import Answer, Submission
-from app.modules.submissions.status import SubmissionStatus
+from app.modules.submissions.status import ReviewReasonCode, SubmissionStatus
 from app.db.session import SessionLocal
-from apps.worker.services.grading_worker_service import AIGradingWorkerService
+from apps.worker.services.grading_worker_service import AIGradingWorkerService, DeterministicGradingWorkerService
 from apps.worker.tasks.ai_grading_tasks import AI_GRADING_TASK_NAME
 from apps.worker.tasks.deterministic_grading_tasks import DETERMINISTIC_GRADING_TASK_NAME
 from apps.worker.tasks.email_tasks import EMAIL_SEND_TASK_NAME
@@ -270,6 +271,18 @@ def _run_ai_worker(context: dict) -> dict:
     )
 
 
+def _run_deterministic_worker(context: dict) -> dict:
+    return DeterministicGradingWorkerService().run(
+        {
+            "job_id": str(context["job_id"]),
+            "teacher_id": str(context["teacher_id"]),
+            "class_id": str(context["class_id"]),
+            "exam_id": str(context["exam_id"]),
+            "submission_id": str(context["submission_id"]),
+        }
+    )
+
+
 class _FakeAsyncResult:
     id = f"task-{uuid.uuid4().hex}"
 
@@ -495,6 +508,7 @@ def test_low_confidence_sets_needs_review_and_submission_needs_review(monkeypatc
         submission = db.get(Submission, context["submission_id"])
 
     assert answer.needs_review is True
+    assert answer.review_reason_code == ReviewReasonCode.AI_LOW_CONFIDENCE.value
     assert submission.needs_review_count == 1
     assert submission.status == SubmissionStatus.NEEDS_REVIEW.value
 
@@ -517,9 +531,33 @@ def test_ai_failure_marks_answer_for_review_without_fake_score(monkeypatch) -> N
     assert answer.auto_score is None
     assert answer.final_score is None
     assert answer.needs_review is True
-    assert answer.ai_feedback == "AI grading failed. Teacher review required."
+    assert answer.ai_feedback is None
     assert answer.ai_confidence is None
+    assert answer.review_reason_code == ReviewReasonCode.AI_UNAVAILABLE.value
     assert job.status == JobStatus.SUCCESS.value
+
+
+def test_missing_grading_data_requires_review_without_calling_provider(monkeypatch) -> None:
+    def fail_if_provider_called(self, task_name, payload):
+        raise AssertionError("Provider must not be called with incomplete grading data.")
+
+    monkeypatch.setattr(ModelGateway, "run", fail_if_provider_called)
+    with SessionLocal() as db:
+        context = _create_submission_with_subjective_answer(db)
+        question = db.get(Question, context["short_question_id"])
+        question.expected_answer = None
+        db.add(question)
+        db.commit()
+
+    _run_ai_worker(context)
+
+    with SessionLocal() as db:
+        answer = db.get(Answer, context["answer_id"])
+
+    assert answer.auto_score is None
+    assert answer.ai_feedback is None
+    assert answer.needs_review is True
+    assert answer.review_reason_code == ReviewReasonCode.MISSING_GRADING_DATA.value
 
 
 def test_worker_does_not_overwrite_teacher_score_and_is_idempotent(monkeypatch) -> None:
@@ -545,6 +583,10 @@ def test_worker_does_not_overwrite_teacher_score_and_is_idempotent(monkeypatch) 
             teacher_score=Decimal("3.00"),
             final_score=Decimal("3.00"),
         )
+        answer = db.get(Answer, context["answer_id"])
+        answer.teacher_feedback = "Teacher feedback must survive AI retries."
+        db.add(answer)
+        db.commit()
 
     first = _run_ai_worker(context)
     second = _run_ai_worker(context)
@@ -558,7 +600,74 @@ def test_worker_does_not_overwrite_teacher_score_and_is_idempotent(monkeypatch) 
     assert answer.teacher_score == Decimal("3.00")
     assert answer.auto_score == Decimal("5.00")
     assert answer.final_score == Decimal("3.00")
+    assert answer.teacher_feedback == "Teacher feedback must survive AI retries."
     assert job.attempts == 2
+
+
+def test_deterministic_retry_preserves_teacher_review_state_and_feedback() -> None:
+    with SessionLocal() as db:
+        context = _create_ai_context(db, include_objective=True, include_short_answer=False)
+        submission = Submission(
+            teacher_id=context["teacher_id"],
+            class_id=context["class_id"],
+            exam_id=context["exam_id"],
+            student_id=context["student_id"],
+            token_id=context["token_id"],
+            status=SubmissionStatus.TEACHER_REVIEWED.value,
+            started_at=_now() - timedelta(minutes=3),
+            submitted_at=_now(),
+            total_score=Decimal("1.00"),
+            max_score=Decimal("2.00"),
+            needs_review_count=0,
+        )
+        db.add(submission)
+        db.flush()
+        answer = Answer(
+            teacher_id=context["teacher_id"],
+            class_id=context["class_id"],
+            exam_id=context["exam_id"],
+            student_id=context["student_id"],
+            submission_id=submission.id,
+            question_id=context["objective_question_id"],
+            student_answer="A",
+            answer_data={"selected_option": "A"},
+            teacher_score=Decimal("1.00"),
+            final_score=Decimal("1.00"),
+            max_score=Decimal("2.00"),
+            teacher_feedback="Manual objective override stays visible.",
+            reviewed_by_teacher=True,
+            needs_review=False,
+        )
+        db.add(answer)
+        db.flush()
+        job = JobLog(
+            teacher_id=context["teacher_id"],
+            class_id=context["class_id"],
+            exam_id=context["exam_id"],
+            submission_id=submission.id,
+            job_type=JobType.DETERMINISTIC_GRADING.value,
+            queue_name=DETERMINISTIC_GRADING_QUEUE,
+            status=JobStatus.QUEUED.value,
+            entity_type="submission",
+            entity_id=submission.id,
+        )
+        db.add(job)
+        db.commit()
+        context = {**context, "submission_id": submission.id, "answer_id": answer.id, "job_id": job.id}
+
+    result = _run_deterministic_worker(context)
+
+    with SessionLocal() as db:
+        answer = db.get(Answer, context["answer_id"])
+        submission = db.get(Submission, context["submission_id"])
+
+    assert result["success"] is True
+    assert answer.auto_score == Decimal("2.00")
+    assert answer.teacher_score == Decimal("1.00")
+    assert answer.final_score == Decimal("1.00")
+    assert answer.teacher_feedback == "Manual objective override stays visible."
+    assert answer.reviewed_by_teacher is True
+    assert submission.status == SubmissionStatus.TEACHER_REVIEWED.value
 
 
 def test_worker_fails_job_log_cleanly_when_submission_is_deleted() -> None:
@@ -583,6 +692,7 @@ def test_no_real_gemini_or_openrouter_call_happens_in_ai_grading_tests(monkeypat
     def fail_if_http_called(*args, **kwargs):
         raise AssertionError("Automated AI grading tests must not call external providers.")
 
+    monkeypatch.setattr(settings, "AI_PROVIDER", "mock")
     monkeypatch.setattr("app.modules.ai.providers.httpx.post", fail_if_http_called)
     with SessionLocal() as db:
         context = _create_submission_with_subjective_answer(db)

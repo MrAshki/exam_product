@@ -27,6 +27,7 @@ class ExamErrorCode:
     VALIDATION_ERROR = "VALIDATION_ERROR"
     FORBIDDEN = "FORBIDDEN"
     EMAIL_SEND_FAILED = "EMAIL_SEND_FAILED"
+    BLUEPRINT_UPDATE_REQUIRES_CONFIRMATION = "BLUEPRINT_UPDATE_REQUIRES_CONFIRMATION"
 
 
 def class_not_found() -> AppException:
@@ -153,6 +154,15 @@ def blueprint_not_found() -> AppException:
         code=ExamErrorCode.BLUEPRINT_NOT_FOUND,
         message="Blueprint was not found.",
         status_code=status.HTTP_404_NOT_FOUND,
+    )
+
+
+def blueprint_update_requires_confirmation(details: dict) -> AppException:
+    return AppException(
+        code=ExamErrorCode.BLUEPRINT_UPDATE_REQUIRES_CONFIRMATION,
+        message="Blueprint update requires explicit destructive confirmation.",
+        status_code=status.HTTP_409_CONFLICT,
+        details=details,
     )
 
 

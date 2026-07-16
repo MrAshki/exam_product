@@ -31,5 +31,5 @@ const tones: Record<string, string> = {
 };
 
 export function ReviewStatusBadge({ status }: ReviewStatusBadgeProps) {
-  return <Badge className={cn(tones[status] ?? "bg-slate-100 text-ink-700")}>{labels[status] ?? status}</Badge>;
+  return <Badge className={cn(tones[status] ?? "bg-slate-100 text-ink-700")}>{labels[status] ?? "وضعیت نامشخص"}</Badge>;
 }

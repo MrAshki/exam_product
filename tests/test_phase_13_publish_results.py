@@ -17,6 +17,8 @@ from app.modules.auth.models import User
 from app.modules.classrooms.models import Classroom
 from app.modules.exams.models import Exam, ExamBlueprint, ExamToken
 from app.modules.exams.status import ExamStatus, QuestionStatus, QuestionType
+from app.modules.grading.feedback import safe_ai_feedback
+from app.modules.grading.review_decision import ReviewDecisionService
 from app.modules.jobs.models import JobLog
 from app.modules.jobs.status import EMAIL_QUEUE, LEADERBOARD_QUEUE, JobStatus, JobType
 from app.modules.notifications.constants import EmailType
@@ -24,7 +26,7 @@ from app.modules.questions.models import Question
 from app.modules.results.models import LeaderboardToken, ResultToken
 from app.modules.students.models import ClassStudent, Student
 from app.modules.submissions.models import Answer, Submission
-from app.modules.submissions.status import SubmissionStatus
+from app.modules.submissions.status import ReviewReasonCode, SubmissionStatus
 from apps.worker.services.leaderboard_worker_service import LeaderboardWorkerService
 from apps.worker.tasks.leaderboard_tasks import LEADERBOARD_UPDATE_TASK_NAME
 from apps.worker.worker import celery_app
@@ -416,6 +418,85 @@ def test_get_result_returns_one_student_and_respects_visibility_flags() -> None:
     assert all(answer["feedback"] is None for answer in data["answers"])
     assert "student_email" not in data
     assert "teacher_id" not in data
+
+
+def test_public_result_prefers_teacher_feedback_without_mutating_ai_feedback() -> None:
+    with SessionLocal() as db:
+        context = _create_publish_context(db, submission_count=1)
+        answer = db.scalar(
+            select(Answer).where(Answer.exam_id == context["exam_id"], Answer.ai_feedback.is_not(None))
+        )
+        answer.teacher_feedback = "بازخورد نهایی معلم"
+        original_ai_feedback = answer.ai_feedback
+        answer_id = answer.id
+        db.add(answer)
+        db.commit()
+
+    client.post(_publish_url(context), cookies=context["cookies"])
+
+    with SessionLocal() as db:
+        token = db.scalar(select(ResultToken).where(ResultToken.exam_id == context["exam_id"]))
+        answer = db.get(Answer, answer_id)
+
+    response = client.get(f"/api/v1/result/{token.token}")
+    feedbacks = [item["feedback"] for item in response.json()["data"]["answers"]]
+
+    assert response.status_code == 200
+    assert "بازخورد نهایی معلم" in feedbacks
+    assert answer.ai_feedback == original_ai_feedback
+
+
+def test_public_result_excludes_ai_provider_failure_text() -> None:
+    with SessionLocal() as db:
+        context = _create_publish_context(db, submission_count=1)
+        answer = db.scalar(
+            select(Answer).where(Answer.exam_id == context["exam_id"], Answer.ai_feedback.is_not(None))
+        )
+        answer.ai_feedback = "provider unavailable: connection timed out"
+        answer.review_reason_code = ReviewReasonCode.AI_UNAVAILABLE.value
+        db.add(answer)
+        db.commit()
+
+    client.post(_publish_url(context), cookies=context["cookies"])
+
+    with SessionLocal() as db:
+        token = db.scalar(select(ResultToken).where(ResultToken.exam_id == context["exam_id"]))
+
+    response = client.get(f"/api/v1/result/{token.token}")
+    feedbacks = [item["feedback"] for item in response.json()["data"]["answers"]]
+
+    assert response.status_code == 200
+    assert "provider unavailable: connection timed out" not in feedbacks
+    assert feedbacks.count(None) >= 1
+
+
+def test_feedback_normalization_keeps_real_text_and_discards_empty_or_legacy_failure() -> None:
+    assert safe_ai_feedback(None) is None
+    assert safe_ai_feedback("   ") is None
+    assert safe_ai_feedback("AI grading failed. Teacher review required.") is None
+    assert safe_ai_feedback("  بازخورد معتبر  ") == "بازخورد معتبر"
+    assert safe_ai_feedback("Useful feedback") == "Useful feedback"
+
+
+def test_review_decision_does_not_revert_published_results() -> None:
+    with SessionLocal() as db:
+        context = _create_publish_context(db, submission_count=1)
+
+    publish_response = client.post(_publish_url(context), cookies=context["cookies"])
+    assert publish_response.status_code == 200
+
+    with SessionLocal() as db:
+        ReviewDecisionService(db).evaluate_submission(
+            teacher_id=context["teacher_id"],
+            class_id=context["class_id"],
+            exam_id=context["exam_id"],
+            submission_id=context["submission_ids"][0],
+        )
+        exam = db.get(Exam, context["exam_id"])
+        submission = db.get(Submission, context["submission_ids"][0])
+
+    assert exam.status == ExamStatus.PUBLISHED.value
+    assert submission.status == SubmissionStatus.PUBLISHED.value
 
 
 def test_get_result_rejects_invalid_soft_deleted_and_unpublished_tokens() -> None:

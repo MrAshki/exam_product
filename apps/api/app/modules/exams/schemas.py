@@ -183,7 +183,7 @@ class BlueprintCreate(BlueprintBase):
 
 
 class BlueprintUpdate(BlueprintBase):
-    pass
+    confirm_destructive_update: bool = False
 
 
 class BlueprintRead(BlueprintBase):

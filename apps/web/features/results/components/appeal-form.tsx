@@ -44,7 +44,7 @@ export function AppealForm({ canAppeal, loading, error, submitted, onSubmit }: A
   if (submitted) {
     return (
       <Alert variant="success">
-        اعتراض شما ثبت شد و برای معلم ارسال شد. وضعیت فعلی: {submitted.status}
+        اعتراض شما ثبت شد و برای بررسی معلم ارسال شد.
       </Alert>
     );
   }

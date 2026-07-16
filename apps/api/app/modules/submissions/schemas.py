@@ -42,7 +42,9 @@ class AnswerRead(BaseModel):
     final_score: Decimal | None
     max_score: Decimal | None
     ai_feedback: str | None
+    teacher_feedback: str | None
     ai_confidence: Decimal | None
+    review_reason_code: str | None
     needs_review: bool
     reviewed_by_teacher: bool
     created_at: datetime

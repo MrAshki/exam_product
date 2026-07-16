@@ -19,6 +19,28 @@ const typeLabels: Record<string, string> = {
   essay: "تشریحی"
 };
 
+const gradingMethodLabels: Record<ReviewAnswer["grading_method"], string> = {
+  deterministic: "تصحیح قطعی",
+  ai: "تصحیح با هوش مصنوعی",
+  manual: "تصحیح دستی",
+  unknown: "روش تصحیح نامشخص"
+};
+
+const scoreSourceLabels: Record<ReviewAnswer["score_source"], string> = {
+  automatic: "نمره خودکار",
+  teacher_override: "تصمیم معلم",
+  final: "نمره نهایی ثبت‌شده",
+  unknown: "منبع نامشخص"
+};
+
+const reviewReasonLabels: Record<string, string> = {
+  AI_UNAVAILABLE: "تصحیح خودکار انجام نشد",
+  AI_LOW_CONFIDENCE: "اطمینان تصحیح خودکار پایین است",
+  POLICY_REQUIRES_TEACHER: "بررسی معلم الزامی است",
+  MISSING_GRADING_DATA: "اطلاعات لازم برای تصحیح کامل نیست",
+  AUTOMATIC_GRADING_CONFLICT: "نتیجه تصحیح نیازمند بررسی است"
+};
+
 function readableData(value: unknown): string | null {
   if (!value) {
     return null;
@@ -40,20 +62,32 @@ function readableData(value: unknown): string | null {
 }
 
 function score(value: string | number | null | undefined) {
-  return value ?? "—";
+  return value ?? "ثبت نشده";
+}
+
+function confidence(value: string | number | null | undefined) {
+  if (value === null || value === undefined) {
+    return null;
+  }
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? `${Math.round(parsed * 100)}٪` : null;
 }
 
 export function AnswerReviewCard({ classId, examId, answer, index }: AnswerReviewCardProps) {
   const studentAnswer = answer.student_answer || readableData(answer.answer_data) || "بدون پاسخ";
   const correctAnswer = answer.correct_answer || readableData(answer.correct_answer_data);
+  const reviewReason = answer.needs_review
+    ? reviewReasonLabels[answer.review_reason_code ?? ""] ?? "نیازمند بازبینی"
+    : null;
+  const aiConfidence = answer.review_reason_code === "AI_UNAVAILABLE" ? null : confidence(answer.ai_confidence);
 
   return (
     <Card className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-2">
           <Badge>پاسخ {index + 1}</Badge>
-          <Badge>{typeLabels[answer.question_type] ?? answer.question_type}</Badge>
-          {answer.needs_review ? <Badge className="bg-amber-50 text-amber-800">نیازمند بازبینی</Badge> : null}
+          <Badge>{typeLabels[answer.question_type] ?? "نوع سؤال نامشخص"}</Badge>
+          {reviewReason ? <Badge className="bg-amber-50 text-amber-800">{reviewReason}</Badge> : null}
           {answer.reviewed_by_teacher ? <Badge className="bg-brand-50 text-brand-700">بازبینی‌شده</Badge> : null}
         </div>
         <span className="text-sm font-medium text-ink-700">
@@ -87,10 +121,20 @@ export function AnswerReviewCard({ classId, examId, answer, index }: AnswerRevie
         </div>
       ) : null}
 
-      <dl className="grid gap-3 text-sm md:grid-cols-4">
+      {answer.review_reason_code === "AI_UNAVAILABLE" ? (
+        <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm leading-6 text-amber-950">
+          تصحیح خودکار این پاسخ انجام نشد. لطفاً پاسخ را به‌صورت دستی بررسی و نمره ثبت کنید.
+        </div>
+      ) : null}
+
+      <dl className="grid gap-3 text-sm md:grid-cols-3">
         <div>
-          <dt className="text-ink-500">نمره پیشنهادی</dt>
+          <dt className="text-ink-500">نمره خودکار</dt>
           <dd className="mt-1 font-medium text-ink-900">{score(answer.auto_score)}</dd>
+        </div>
+        <div>
+          <dt className="text-ink-500">روش تصحیح</dt>
+          <dd className="mt-1 font-medium text-ink-900">{gradingMethodLabels[answer.grading_method]}</dd>
         </div>
         <div>
           <dt className="text-ink-500">نمره معلم</dt>
@@ -101,15 +145,22 @@ export function AnswerReviewCard({ classId, examId, answer, index }: AnswerRevie
           <dd className="mt-1 font-medium text-ink-900">{score(answer.final_score)}</dd>
         </div>
         <div>
-          <dt className="text-ink-500">اطمینان AI</dt>
-          <dd className="mt-1 font-medium text-ink-900">{score(answer.ai_confidence)}</dd>
+          <dt className="text-ink-500">بارم سؤال</dt>
+          <dd className="mt-1 font-medium text-ink-900">{score(answer.max_score)}</dd>
+        </div>
+        <div>
+          <dt className="text-ink-500">منبع نمره نهایی</dt>
+          <dd className="mt-1 font-medium text-ink-900">{scoreSourceLabels[answer.score_source]}</dd>
         </div>
       </dl>
 
       {answer.ai_feedback ? (
-        <div className="rounded-md bg-brand-50 p-3">
-          <p className="text-xs font-medium text-brand-700">بازخورد</p>
-          <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-brand-950">{answer.ai_feedback}</p>
+        <div className="rounded-md border border-blue-100 bg-blue-50 p-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-xs font-medium text-blue-800">ارزیابی خودکار</p>
+            {aiConfidence ? <span className="text-xs text-blue-700">اطمینان: {aiConfidence}</span> : null}
+          </div>
+          <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-blue-950">{answer.ai_feedback}</p>
         </div>
       ) : null}
 
