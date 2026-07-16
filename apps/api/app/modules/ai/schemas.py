@@ -9,7 +9,7 @@ class GatewayResult:
     provider: str
     model: str
     raw_response: str | None = None
-    response_json: dict[str, Any] | None = None
+    response_json: dict[str, Any] | list[Any] | None = None
     prompt_tokens: int | None = None
     completion_tokens: int | None = None
 

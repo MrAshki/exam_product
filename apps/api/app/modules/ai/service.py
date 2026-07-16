@@ -37,8 +37,7 @@ class AIService:
         )
         prompt_hash = hashlib.sha256(prompt.encode("utf-8")).hexdigest()
         started_at = time.perf_counter()
-        provider = settings.AI_PROVIDER.lower()
-        model = settings.AI_MODEL
+        provider, model = self._expected_log_metadata(task_name)
         request_json = {
             "task_name": task_name,
             "prompt_hash": prompt_hash,
@@ -96,8 +95,7 @@ class AIService:
         payload_text = json.dumps(request_payload, sort_keys=True)
         prompt_hash = hashlib.sha256(payload_text.encode("utf-8")).hexdigest()
         started_at = time.perf_counter()
-        provider = settings.AI_PROVIDER.lower()
-        model = settings.AI_MODEL
+        provider, model = self._expected_log_metadata(task_name)
         request_json = {
             "task_name": task_name,
             "prompt_hash": prompt_hash,
@@ -162,7 +160,7 @@ class AIService:
         status: str,
         prompt_hash: str | None = None,
         request_json: dict[str, Any] | None = None,
-        response_json: dict[str, Any] | None = None,
+        response_json: dict[str, Any] | list[Any] | None = None,
         raw_response: str | None = None,
         error_code: str | None = None,
         error_message: str | None = None,
@@ -201,3 +199,24 @@ class AIService:
     @staticmethod
     def _json_safe(payload: dict[str, Any]) -> dict[str, Any]:
         return json.loads(json.dumps(payload, default=str))
+
+    @staticmethod
+    def _expected_log_metadata(task_name: str) -> tuple[str, str]:
+        provider = (settings.AI_PROVIDER or "").strip().lower()
+        if provider == "openrouter":
+            return provider, AIService._openrouter_primary_model_for_task(task_name)
+        if provider == "gemini":
+            return provider, settings.AI_MODEL
+        if provider == "mock":
+            return provider, "mock"
+        return provider, settings.AI_MODEL
+
+    @staticmethod
+    def _openrouter_primary_model_for_task(task_name: str) -> str:
+        if task_name == "suggest_essay_rubric":
+            return settings.AI_SUGGEST_ESSAY_RUBRIC_PRIMARY_MODEL or settings.AI_MODEL
+        if task_name == "short_answer_grading":
+            return settings.AI_SHORT_ANSWER_GRADING_PRIMARY_MODEL or settings.AI_MODEL
+        if task_name == "essay_grading":
+            return settings.AI_ESSAY_GRADING_PRIMARY_MODEL or settings.AI_MODEL
+        return settings.AI_MODEL

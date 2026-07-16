@@ -36,6 +36,23 @@ class Settings(BaseSettings):
     AI_MODEL: str = "gemini-2.0-flash"
     GEMINI_API_KEY: str | None = Field(default=None)
     AI_TIMEOUT_SECONDS: int = 30
+    OPENROUTER_API_KEY: str | None = Field(default=None)
+    OPENROUTER_BASE_URL: str = "https://openrouter.ai/api/v1"
+    OPENROUTER_SITE_URL: str = ""
+    OPENROUTER_APP_NAME: str = "Class-Centric AI Exam Platform"
+    OPENROUTER_REQUIRE_FREE_MODELS: bool = True
+    AI_SUGGEST_ESSAY_RUBRIC_PRIMARY_MODEL: str = ""
+    AI_SUGGEST_ESSAY_RUBRIC_FALLBACK_MODEL: str = ""
+    AI_SUGGEST_ESSAY_RUBRIC_TEMPERATURE: float = 0.2
+    AI_SUGGEST_ESSAY_RUBRIC_MAX_TOKENS: int = 1200
+    AI_SHORT_ANSWER_GRADING_PRIMARY_MODEL: str = ""
+    AI_SHORT_ANSWER_GRADING_FALLBACK_MODEL: str = ""
+    AI_SHORT_ANSWER_GRADING_TEMPERATURE: float = 0.1
+    AI_SHORT_ANSWER_GRADING_MAX_TOKENS: int = 800
+    AI_ESSAY_GRADING_PRIMARY_MODEL: str = ""
+    AI_ESSAY_GRADING_FALLBACK_MODEL: str = ""
+    AI_ESSAY_GRADING_TEMPERATURE: float = 0.1
+    AI_ESSAY_GRADING_MAX_TOKENS: int = 1600
 
     EMAIL_PROVIDER: str = "mock"
     SMTP_HOST: str = ""

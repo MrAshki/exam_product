@@ -23,7 +23,29 @@ $BrowserApiBaseUrl = "http://localhost:8081/api/v1"
 $DockerTimeoutSeconds = 150
 $StartupTimeoutSeconds = 90
 $ApiBaseConflictDetected = $false
-$AiEnvKeys = @("AI_PROVIDER", "AI_MODEL", "GEMINI_API_KEY", "AI_TIMEOUT_SECONDS")
+$AiEnvKeys = @(
+    "AI_PROVIDER",
+    "AI_MODEL",
+    "GEMINI_API_KEY",
+    "AI_TIMEOUT_SECONDS",
+    "OPENROUTER_API_KEY",
+    "OPENROUTER_BASE_URL",
+    "OPENROUTER_SITE_URL",
+    "OPENROUTER_APP_NAME",
+    "OPENROUTER_REQUIRE_FREE_MODELS",
+    "AI_SUGGEST_ESSAY_RUBRIC_PRIMARY_MODEL",
+    "AI_SUGGEST_ESSAY_RUBRIC_FALLBACK_MODEL",
+    "AI_SUGGEST_ESSAY_RUBRIC_TEMPERATURE",
+    "AI_SUGGEST_ESSAY_RUBRIC_MAX_TOKENS",
+    "AI_SHORT_ANSWER_GRADING_PRIMARY_MODEL",
+    "AI_SHORT_ANSWER_GRADING_FALLBACK_MODEL",
+    "AI_SHORT_ANSWER_GRADING_TEMPERATURE",
+    "AI_SHORT_ANSWER_GRADING_MAX_TOKENS",
+    "AI_ESSAY_GRADING_PRIMARY_MODEL",
+    "AI_ESSAY_GRADING_FALLBACK_MODEL",
+    "AI_ESSAY_GRADING_TEMPERATURE",
+    "AI_ESSAY_GRADING_MAX_TOKENS"
+)
 $EmailEnvKeys = @("EMAIL_PROVIDER", "SMTP_HOST", "SMTP_PORT", "SMTP_USERNAME", "SMTP_PASSWORD", "SMTP_FROM_EMAIL", "SMTP_FROM_NAME", "SMTP_USE_TLS")
 $UseRealAI = [bool]($UseConfiguredAI -or $UseConfiguredProviders)
 $UseRealEmail = [bool]($UseConfiguredEmail -or $UseConfiguredProviders)
@@ -360,7 +382,7 @@ function Invoke-WithProviderEnvironment {
 function Test-ConfiguredProviders {
     param([bool]$ValidateAI, [bool]$ValidateEmail)
     Assert-ConfigPrerequisites
-    Write-Step "Validating configured providers without contacting Gemini or SMTP."
+    Write-Step "Validating configured providers without contacting Gemini, OpenRouter, or SMTP."
     Invoke-WithProviderEnvironment -RealAI $true -RealEmail $true -Script {
         $env:RUNNER_VALIDATE_AI = if ($ValidateAI) { "true" } else { "false" }
         $env:RUNNER_VALIDATE_EMAIL = if ($ValidateEmail) { "true" } else { "false" }
@@ -370,12 +392,23 @@ function Test-ConfiguredProviders {
 from urllib.parse import urlparse
 
 from app.core.config import settings
+from app.modules.ai.task_config import (
+    TASK_ESSAY_GRADING,
+    TASK_SHORT_ANSWER_GRADING,
+    TASK_SUGGEST_ESSAY_RUBRIC,
+    get_task_model_config,
+)
 
 validate_ai = __import__("os").environ.get("RUNNER_VALIDATE_AI") == "true"
 validate_email = __import__("os").environ.get("RUNNER_VALIDATE_EMAIL") == "true"
 
-SUPPORTED_AI = {"mock", "gemini"}
+SUPPORTED_AI = {"mock", "gemini", "openrouter"}
 SUPPORTED_EMAIL = {"mock", "smtp", "gmail"}
+TASK_LABELS = {
+    TASK_SUGGEST_ESSAY_RUBRIC: "SUGGEST_ESSAY_RUBRIC",
+    TASK_SHORT_ANSWER_GRADING: "SHORT_ANSWER_GRADING",
+    TASK_ESSAY_GRADING: "ESSAY_GRADING",
+}
 
 def require(condition, name):
     if not condition:
@@ -384,6 +417,14 @@ def require(condition, name):
 def host_port(value):
     parsed = urlparse(value)
     return parsed.hostname, parsed.port
+
+def require_positive_int(value, name):
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        raise SystemExit(f"Configured provider validation failed: {name}")
+    require(parsed > 0, name)
+    return parsed
 
 db_host, db_port = host_port(settings.sqlalchemy_database_uri)
 redis_host, redis_port = host_port(settings.redis_dsn)
@@ -396,7 +437,12 @@ if validate_ai:
     require(ai_provider in SUPPORTED_AI, "AI_PROVIDER is unsupported")
     if ai_provider == "gemini":
         require(bool(settings.GEMINI_API_KEY), "GEMINI_API_KEY is required for AI_PROVIDER=gemini")
-    require(bool(settings.AI_MODEL), "AI_MODEL is required")
+        require(bool(settings.AI_MODEL), "AI_MODEL is required")
+    if ai_provider == "openrouter":
+        require(bool(settings.OPENROUTER_API_KEY), "OPENROUTER_API_KEY is required for AI_PROVIDER=openrouter")
+        require(bool(settings.OPENROUTER_BASE_URL), "OPENROUTER_BASE_URL is required for AI_PROVIDER=openrouter")
+        for task_name in TASK_LABELS:
+            get_task_model_config(task_name)
     require(int(settings.AI_TIMEOUT_SECONDS) > 0, "AI_TIMEOUT_SECONDS must be positive")
 
 if validate_email:
@@ -411,17 +457,21 @@ if validate_email:
         require(bool(settings.SMTP_FROM_EMAIL), "SMTP_FROM_EMAIL is required")
 
 require(bool(db_host), "DATABASE_HOST is required")
-require(bool(db_port), "DATABASE_PORT is required")
+require_positive_int(db_port, "DATABASE_PORT must be a positive integer")
 require(bool(redis_host), "REDIS_HOST is required")
-require(bool(redis_port), "REDIS_PORT is required")
-if db_host in {"localhost", "127.0.0.1"}:
-    require(db_port == 55432, "DATABASE_PORT must be 55432 for local configured-provider runs")
-if redis_host in {"localhost", "127.0.0.1"}:
-    require(redis_port == 16379, "REDIS_PORT must be 16379 for local configured-provider runs")
+require_positive_int(redis_port, "REDIS_PORT must be a positive integer")
 
 print(f"AI_PROVIDER={settings.AI_PROVIDER}")
-print(f"AI_MODEL={settings.AI_MODEL}")
-print(f"GEMINI_API_KEY_CONFIGURED={bool(settings.GEMINI_API_KEY)}")
+if ai_provider == "openrouter":
+    print(f"OPENROUTER_API_KEY_CONFIGURED={bool(settings.OPENROUTER_API_KEY)}")
+    print(f"OPENROUTER_REQUIRE_FREE_MODELS={settings.OPENROUTER_REQUIRE_FREE_MODELS}")
+    for task_name, label in TASK_LABELS.items():
+        task_config = get_task_model_config(task_name)
+        print(f"{label}_PRIMARY_MODEL={task_config.primary_model}")
+        print(f"{label}_FALLBACK_MODEL={task_config.fallback_model or ''}")
+else:
+    print(f"AI_MODEL={settings.AI_MODEL}")
+    print(f"GEMINI_API_KEY_CONFIGURED={bool(settings.GEMINI_API_KEY)}")
 print(f"EMAIL_PROVIDER={settings.EMAIL_PROVIDER}")
 print(f"SMTP_HOST={settings.SMTP_HOST}")
 print(f"SMTP_PORT={settings.SMTP_PORT}")
